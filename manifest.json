@@ -1,0 +1,9 @@
+{
+	"id": "the-only-one-tagger",
+	"name": "The Only One Tagger",
+	"version": "0.1.0",
+	"minAppVersion": "0.15.0",
+	"description": "AI-powered faceted tagging with verified taxonomy for Obsidian.",
+	"author": "Smiling",
+	"isDesktopOnly": true
+}

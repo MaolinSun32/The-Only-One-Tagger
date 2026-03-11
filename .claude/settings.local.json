@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "WebFetch(domain:forum.obsidian.md)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.obsidian.md)",
+      "Bash(cd \"D:/Vault-4/Projects/AI-tag-wrangler\" && npm install 2>&1)"
+    ]
+  }
+}
