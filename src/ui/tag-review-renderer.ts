@@ -107,7 +107,7 @@ export class TagReviewRenderer {
 		});
 
 		const info = row.createEl('div', { cls: 'atw-tag-info' });
-		createTagChip(info, tag);
+		createTagChip(info, tag, () => { /* label updated in-place */ });
 		createConfidenceBadge(info, tag.confidence);
 
 		if (tag.reason) {

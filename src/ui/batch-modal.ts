@@ -173,7 +173,7 @@ export class BatchModal extends Modal {
 		for (const tag of result.suggestions) {
 			const row = area.createEl('div', { cls: `atw-tag-row atw-review-${tag.reviewStatus ?? 'pending'}` });
 			const info = row.createEl('div', { cls: 'atw-tag-info' });
-			createTagChip(info, tag);
+			createTagChip(info, tag, () => { /* label updated in-place */ });
 			createConfidenceBadge(info, tag.confidence);
 			if (tag.reason) info.createEl('span', { cls: 'atw-tag-reason', text: tag.reason });
 			createReviewButtons(row, tag,

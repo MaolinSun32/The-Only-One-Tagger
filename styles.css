@@ -59,8 +59,33 @@
 	gap: 4px;
 }
 
-/* ─── Tag chips ─────────────────────────────────── */
-.atw-tag-chip {
+/* ─── Tag chips (editable input) ───────────────── */
+input.atw-tag-chip {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	border-radius: 12px;
+	font-size: 12px;
+	line-height: 1.4;
+	border: 1px solid transparent;
+	font-family: inherit;
+	outline: none;
+	cursor: text;
+	min-width: 3em;
+	width: auto;
+}
+
+input.atw-tag-chip:hover {
+	border-color: var(--interactive-accent);
+}
+
+input.atw-tag-chip:focus {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px hsla(var(--color-accent-hsl), 0.25);
+}
+
+/* Non-editable chip (span, used for current tags) */
+span.atw-tag-chip {
 	display: inline-flex;
 	align-items: center;
 	padding: 2px 8px;
@@ -207,7 +232,7 @@
 }
 
 .atw-btn-accept {
-	background: hsla(var(--color-green-hsl), 0.2);
+	background: hsla(var(--color-green-hsl), 0.15);
 	color: var(--color-green);
 }
 
@@ -215,13 +240,23 @@
 	background: hsla(var(--color-green-hsl), 0.4);
 }
 
+.atw-btn-accept.atw-btn-active {
+	background: var(--color-green);
+	color: var(--background-primary);
+}
+
 .atw-btn-reject {
-	background: hsla(var(--color-red-hsl), 0.2);
+	background: hsla(var(--color-red-hsl), 0.15);
 	color: var(--color-red);
 }
 
 .atw-btn-reject:hover {
 	background: hsla(var(--color-red-hsl), 0.4);
+}
+
+.atw-btn-reject.atw-btn-active {
+	background: var(--color-red);
+	color: var(--background-primary);
 }
 
 .atw-btn-primary {
@@ -246,11 +281,16 @@
 
 /* ─── Review status row highlights ──────────────── */
 .atw-review-accepted {
-	background: hsla(var(--color-green-hsl), 0.05);
+	background: hsla(var(--color-green-hsl), 0.12);
+	border-left: 3px solid var(--color-green);
+	padding-left: 3px;
 }
 
 .atw-review-rejected {
-	opacity: 0.5;
+	background: hsla(var(--color-red-hsl), 0.08);
+	border-left: 3px solid var(--color-red);
+	padding-left: 3px;
+	opacity: 0.6;
 }
 
 /* ─── Toolbar ───────────────────────────────────── */
