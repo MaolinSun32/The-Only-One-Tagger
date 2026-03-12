@@ -7,7 +7,11 @@
       "WebFetch(domain:forum.obsidian.md)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:docs.obsidian.md)",
-      "Bash(cd \"D:/Vault-4/Projects/AI-tag-wrangler\" && npm install 2>&1)"
+      "Bash(cd \"D:/Vault-4/Projects/AI-tag-wrangler\" && npm install 2>&1)",
+      "Bash(find \"D:\\\\Vault-4\\\\Projects\\\\obsidian-sample-plugin\" -type f \\\\\\( -name \"*.json\" -o -name \"*.md\" \\\\\\) | xargs ls -la)",
+      "Bash(grep -r \"sample-plugin\" \"D:\\\\Vault-4\\\\Projects\\\\obsidian-sample-plugin\" --include=\"*.md\" --include=\"*.ts\" 2>/dev/null | head -20)",
+      "WebFetch(domain:obsidian.charlespeters.net)",
+      "WebFetch(domain:help.obsidian.md)"
     ]
   }
 }
