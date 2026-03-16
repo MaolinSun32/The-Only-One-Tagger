@@ -1880,4 +1880,485 @@ M1 基础设施
 
 > 历次架构审核记录已迁移至 [update-logs.md](update-logs.md)。
 
+---
+
+## 九、项目架构总览
+
+### 9.1 分层架构
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         表现层（UI）                                │
+│  M6 侧边栏 UI          M7 批量处理 UI        M8 标签库管理 UI       │
+│  TagReviewView          BatchStatusBar        TagBrowserModal       │
+│  Tab A: 标签审核         BatchProgressModal    TagPropertyEditor     │
+│  Tab B: Schema Editor                         StatisticsPanel       │
+├─────────────────────────────────────────────────────────────────────┤
+│                      业务编排层（Operations）                        │
+│  M5 AnalysisOrchestrator    TagOperationExecutor                    │
+│     TypeOperationExecutor   BatchProcessor     TagMerger            │
+│     BulkYamlModifier        RelationDiscoverer                      │
+├─────────────────────────────────────────────────────────────────────┤
+│               外部 I/O 层（Network / AI / Verification）             │
+│  M4 HealthChecker × 4         OpenAICompatibleProvider × 2          │
+│     NetworkStatusAggregator   PromptAssembler                       │
+│     HttpClient                AIResponseValidator (resolveBlacklist) │
+│     WikipediaClient           SearchClient (Brave/Tavily)           │
+│     VerificationPipeline      AIVerifier                            │
+│     VerificationQueueManager  RateLimiter                           │
+├─────────────────────────────────────────────────────────────────────┤
+│                      纯计算层（Engine）                              │
+│  M3 SchemaResolver      PromptFilterBuilder    TagNormalizer        │
+│     TagMatcher           FrontmatterService     ContentHasher       │
+├─────────────────────────────────────────────────────────────────────┤
+│                     数据持久化层（Storage）                          │
+│  M2 DataStore<T>        RegistryStore           StagingStore        │
+│     SchemaStore          QueueStore              BatchStateStore     │
+│     BackupManager        SeedInitializer                            │
+├─────────────────────────────────────────────────────────────────────┤
+│                       基础设施层（Foundation）                       │
+│  M1 types.ts (全项目契约)    constants.ts    settings.ts    main.ts │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**设计原则**：下层不依赖上层，同层不互相依赖。数据向上流动（Store → Engine → Operations → UI），控制向下传递（UI → Operations → Engine/AI → Store）。
+
+### 9.2 模块依赖图
+
+```
+M1 基础设施 ──────────────────────────────────────────────────────────┐
+ │ types.ts, constants.ts, settings.ts, main.ts                      │
+ ▼                                                                    │
+M2 数据持久化 ────────────────────────────────────────────────────┐   │
+ │ DataStore<T>, RegistryStore, StagingStore, SchemaStore,        │   │
+ │ QueueStore, BatchStateStore, BackupManager, SeedInitializer    │   │
+ ▼                                                                │   │
+M3 标签逻辑引擎 ─────────────────────────────────────────────┐   │   │
+ │ SchemaResolver, PromptFilterBuilder, TagNormalizer,        │   │   │
+ │ TagMatcher, FrontmatterService, ContentHasher              │   │   │
+ ▼                                                            │   │   │
+M4 网络/AI/验证 ─────────────────────────────────────────┐   │   │   │
+ │ HealthChecker, NetworkStatusAggregator, HttpClient,    │   │   │   │
+ │ OpenAICompatibleProvider, PromptAssembler,              │   │   │   │
+ │ AIResponseValidator, WikilinkCandidateCollector,        │   │   │   │
+ │ VerificationPipeline, WikipediaClient, SearchClient,    │   │   │   │
+ │ AIVerifier, VerificationQueueManager, RateLimiter       │   │   │   │
+ ▼                                                         │   │   │   │
+M5 标签生命周期 ─────────────────────────────────────┐    │   │   │   │
+ │ AnalysisOrchestrator, TagOperationExecutor,        │    │   │   │   │
+ │ TypeOperationExecutor                              │    │   │   │   │
+ ├────────────────────────┬───────────────────────┐   │    │   │   │   │
+ ▼                        ▼                       ▼   │    │   │   │   │
+M6 侧边栏 UI        M7 批量处理           M8 标签库管理 │   │   │   │   │
+ TagReviewView        VaultScanner         TagBrowser   │   │   │   │   │
+ SchemaEditor         BatchProcessor       TagMerger    │   │   │   │   │
+ NetworkIndicator     BatchStateManager    BulkYaml..   │   │   │   │   │
+                      StatusBar/Modal      ImportExport │   │   │   │   │
+                                           Statistics   │   │   │   │   │
+                                           RelationDisc │   │   │   │   │
+                                                        │   │   │   │   │
+ M7 ← M6（批量入口在侧边栏命令中）                       │   │   │   │   │
+ M7 ∥ M8（互相独立，可并行开发）                          │   │   │   │   │
+```
+
+### 9.3 外部服务连接图
+
+```
+                    ┌──────────────────┐
+                    │   Obsidian API   │
+                    │ processFrontMatter│
+                    │ metadataCache    │
+                    │ requestUrl       │
+                    │ adapter.read/write│
+                    └────────┬─────────┘
+                             │
+┌────────────────────────────┼────────────────────────────┐
+│                      本插件内部                          │
+│                            │                            │
+│    ┌───────────────────────┼───────────────────────┐    │
+│    │              HttpClient (统一出口)              │    │
+│    └───────┬───────────┬──────────┬─────────┬──────┘    │
+│            │           │          │         │           │
+│            ▼           ▼          ▼         ▼           │
+│    ┌───────────┐ ┌──────────┐ ┌────────┐ ┌──────────┐  │
+│    │Generation │ │Verificat.│ │Search  │ │Wikipedia │  │
+│    │  AI       │ │  AI      │ │  API   │ │  API     │  │
+│    │(多模态)   │ │(文本)    │ │(Brave/ │ │(免费)    │  │
+│    │          │ │          │ │Tavily) │ │          │  │
+│    └─────┬─────┘ └────┬─────┘ └───┬────┘ └────┬─────┘  │
+│          │            │           │            │        │
+│    ┌─────┴─────┐ ┌────┴────┐ ┌───┴───┐  ┌────┴─────┐  │
+│    │HealthChk  │ │HealthChk│ │HlthChk│  │HealthChk │  │
+│    │(generation)│ │(verif.) │ │(search)│ │(wikipedia)│  │
+│    └─────┬─────┘ └────┬────┘ └───┬───┘  └────┬─────┘  │
+│          └──────┬─────┘          │            │        │
+│                 ▼                │            │        │
+│    ┌────────────────────┐       │            │        │
+│    │NetworkStatusAggr.  │       │            │        │
+│    │isFullyOnline()     │◄──────┘            │        │
+│    │= gen ∧ verif       │   不参与红绿灯      │        │
+│    │getStatusTooltip()  │                    │        │
+│    └────────────────────┘                    │        │
+│                                              │        │
+│    VerificationPipeline ─────────────────────┘        │
+│    (查询 wikipedia/search checker 可达性)               │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 9.4 数据存储与读写权限
+
+```
+.obsidian/plugins/the-only-one-tagger/
+│
+├── data.json ·················· 用户设置
+│   写：settings.ts (saveData)
+│   读：所有模块 (loadData)
+│
+├── tag-schema.json ············ 标签决策树
+│   写：SeedInitializer, SchemaStore, Schema Editor (M6)
+│   读：SchemaResolver, PromptFilterBuilder, AIResponseValidator
+│
+├── tag-registry.json ·········· 标签库（verified + rejected）
+│   写：SeedInitializer, applyAll (M5), TagMerger (M8),
+│       VerificationQueueManager (验证后更新 verified_by/flagged)
+│   读：PromptFilterBuilder, AIResponseValidator (getBlacklistMap),
+│       TagMatcher, 手动模式 (M6), TagBrowser (M8)
+│
+├── tag-staging.json ··········· 暂存区（待用户确认）
+│   写：AnalysisOrchestrator (M5), TagOperationExecutor (M5),
+│       VerificationPipeline (badge 更新), VerificationQueueManager (广播),
+│       BatchProcessor (M7)
+│   读：侧边栏 UI (M6), applyAll (M5)
+│
+├── verification-queue.json ···· 离线验证队列
+│   写：VerificationQueueManager (入队/出队/清理)
+│   读：VerificationQueueManager
+│
+├── batch-state.json ··········· 批量处理进度
+│   写：BatchStateManager (M7)
+│   读：BatchStateManager (恢复)
+│
+├── merge-state.json ··········· 标签合并进度（临时）
+│   写：TagMerger via BulkYamlModifier (M8)
+│   读：BulkYamlModifier (启动恢复)
+│
+├── schema-sync-state.json ····· Schema 同步进度（临时）
+│   写：Schema Editor via BulkYamlModifier (M6)
+│   读：BulkYamlModifier (启动恢复)
+│
+└── backups/ ··················· 自动备份
+    写：BackupManager (合并/同步前)
+    读：用户手动恢复
+```
+
+**笔记 .md 文件**（YAML frontmatter）：
+- 写：`FrontmatterService.write()` (applyAll)，`BulkYamlModifier` (合并/同步)
+- 读：`FrontmatterService.read()`，`ContentHasher`，`VaultScanner`，`WikilinkCandidateCollector`
+
+### 9.5 核心数据流
+
+#### 流程 A：单篇笔记分析（用户点击"分析"）
+
+```
+用户点击 [分析]
+     │
+     ▼
+AnalysisOrchestrator.analyzeNote(file)
+     │
+     ├─ 1. schema deep clone 快照
+     │
+     ├─ 2. GenerationProvider.detectType()
+     │      笔记全文 + 12 type 描述 ──→ Generation AI ──→ type 名称
+     │
+     ├─ 3. PromptFilterBuilder.build(type)
+     │      SchemaResolver ──→ taxonomy facets
+     │      RegistryStore.getTagsByFacets() ──→ 全量候选（verified only）
+     │
+     ├─ 4. PromptAssembler.buildStep2Prompt()
+     │      候选标签 + facet 定义 + enum values + wikilink 池 + 笔记全文
+     │      │
+     │      ▼
+     │      GenerationProvider.generateTags() ──→ Generation AI ──→ { facet: [tags] }
+     │
+     ├─ 5. AIResponseValidator.validate()
+     │      ├─ facet 白名单过滤
+     │      ├─ TagNormalizer 规范化
+     │      ├─ resolveBlacklist(): taxonomy 黑名单（registry rejected → 替换）
+     │      ├─ resolveBlacklist(): enum 黑名单（schema blacklist → 替换）
+     │      ├─ 区分 verified（🟢）vs 新词
+     │      └─ 单值/多值规范化 + 空值过滤
+     │
+     ├─ 6. StagingStore.write()
+     │      🟢 库内 → badge: registry
+     │      新词 → badge: verifying (⚪)
+     │      同时写入 content_hash
+     │
+     └─ 7. 新词 → VerificationPipeline（并发，见流程 B）
+           每个标签完成后 → 事件通知 → UI 刷新 badge
+```
+
+#### 流程 B：标签验证管线
+
+```
+新词进入 VerificationPipeline
+     │
+     ├─ wikipediaChecker.getStatus() == online?
+     │      ├─ yes → WikipediaClient.lookup(label)
+     │      │          ├─ 命中 → badge: wiki_verified (🔵) ──→ 完成
+     │      │          └─ 未命中 → 继续
+     │      └─ no/跳过 → 继续
+     │
+     ├─ searchChecker.getStatus() == not_configured?
+     │      ├─ yes → badge: needs_review (🟡) ──→ 完成
+     │      └─ no → SearchClient.search(label)
+     │               │
+     │               ▼
+     │             SearchResult[] (title, snippet, url)
+     │               │
+     │               ▼
+     │             VerificationProvider.verifyTag(label, facet, searchResults)
+     │               │
+     │               ▼
+     │             Verification AI 判定
+     │               ├─ 确认 → badge: search_verified (🔵) ──→ 完成
+     │               └─ 存疑 → badge: needs_review (🟡) ──→ 完成
+     │
+     └─ 完成后:
+          StagingStore.update(badge)
+          emit('tagVerified', { label, badge })
+          → UI 订阅 → 刷新圆点颜色 + 启用操作按钮
+```
+
+#### 流程 C：用户审核与 applyAll
+
+```
+用户在侧边栏逐条操作（仅修改 staging，不触碰 registry）
+     │
+     ├─ ✓ Accept: toggleAccept() → staging.user_status: accepted
+     ├─ ✗ Delete: toggleDelete() → staging.user_status: deleted
+     ├─ ✎ Edit:   edit() → 新词替换旧词，replaces 链继承
+     └─ ↻ Regen:  regenerate() → AI 生成同义候选（内存暂存）→ 选一个替换
+     │
+     ▼ 用户点击 [应用]
+     │
+applyAll(notePath)
+     │
+     ├─ Step 1: Facet 有效性校验（schema 中已删除的 facet → 跳过 + Notice）
+     ├─ Step 2: 构建 TagWriteData（纯内存）
+     │
+     ├─ Step 3: FrontmatterService.write(file, tagWriteData)  ← 最危险，先执行
+     │          失败 → 停止，不执行后续，用户可重试
+     │
+     ├─ Step 4: RegistryStore 写入（幂等）
+     │          🟢 → 不变
+     │          🔵/🟡 → addTag(verified_by: wiki/search/manual)
+     │          expandFacets() → 标签已有但 facet 新
+     │          replaces 链 → rejectTag(rejected_in_favor_of)
+     │
+     ├─ Step 5: VerificationQueueManager 清理（已入库的标签出队）
+     │
+     └─ Step 6: StagingStore 增量清理
+               accepted/deleted → 移除
+               pending → 保留（多 type 部分审核场景）
+```
+
+#### 流程 D：批量处理
+
+```
+用户执行 [批量打标] 命令
+     │
+     ├─ VaultScanner.scan(filters)
+     │     按文件夹过滤 + skip_tagged + 路径排序
+     │     → TFile[] 有序列表
+     │
+     ├─ BatchStateManager.init()
+     │     创建 batch-state.json（processed_files: []）
+     │
+     └─ BatchProcessor.start()
+          │
+          ├─ 按 batch_concurrency 控制并发（信号量 + RateLimiter）
+          │
+          ├─ 逐文件调用 AnalysisOrchestrator.analyzeNote(file)
+          │     结果写入 staging（含 content_hash）
+          │     每完成一个 → processed_files 追加路径 → 持久化
+          │     失败 → failed_files 记录错误 → 跳过，继续下一个
+          │
+          ├─ emit('progress', { processed, total, current_file })
+          │     → BatchStatusBar 显示 "批量打标 127/400"
+          │     → BatchProgressModal 更新列表
+          │
+          ├─ 支持 pause() / resume() / terminate()
+          │
+          └─ Obsidian 重启 → BatchStateManager 检测未完成 batch
+               → 提示恢复 → 重新扫描文件列表 → 过滤 processed_files → 继续
+```
+
+#### 流程 E：离线/上线转换
+
+```
+离线状态
+     │
+     ├─ 用户手动键入新 taxonomy 标签
+     │     badge: needs_review (🟡)
+     │     → 可直接 Accept + applyAll
+     │     → 同时入 verification-queue.json
+     │
+     └─ applyAll 写入 YAML + registry（verified_by: manual）
+
+                    ···网络恢复···
+
+HealthChecker 检测到 online
+     │
+     ▼
+NetworkStatusAggregator emit('statusChange')
+     │
+     ├─ UI: 🔴 → 🟢
+     │
+     └─ VerificationQueueManager 自动重试队列中的标签
+          │
+          ├─ 验证通过:
+          │     registry: 更新 verified_by（manual → wikipedia/ai_search）
+          │     staging: 广播更新 badge（如标签仍在 staging 中）
+          │     如标签 flagged → unflagTag()
+          │     → 从队列移除
+          │
+          └─ 验证失败:
+                标签已在 registry（之前 applyAll 过）→ flagTag(label)
+                标签仍在 staging → badge 保持 needs_review
+                → Notice 通知用户（可点击跳转 TagBrowser）
+                → 从队列移除
+```
+
+### 9.6 事件订阅关系
+
+```
+发布者                         事件                      订阅者
+─────────────                  ─────                     ─────
+HealthChecker (×4)             statusChange              NetworkStatusAggregator
+NetworkStatusAggregator        statusChange              NetworkIndicator (M6)
+                                                         VerificationQueueManager (M4)
+
+VerificationPipeline           tagVerified               TagReviewView/AI 模式 (M6)
+                               (label, badge)            → 刷新圆点 + 启用按钮
+
+StagingStore                   change                    TagReviewView (M6)
+                                                         → 刷新标签列表
+
+SchemaStore                    change                    SchemaEditor Tab B (M6)
+
+BatchProcessor                 progress                  BatchStatusBar (M7)
+                               (processed, total, file)  BatchProgressModal (M7)
+
+BatchProcessor                 noteCompleted             TagReviewView (M6)
+                               (notePath)                → 自动刷新为审核视图
+```
+
+### 9.7 全部源文件清单（按模块/目录）
+
+```
+src/
+├── main.ts                                    M1  插件主类（依赖注入根节点）
+├── types.ts                                   M1  全项目类型契约
+├── constants.ts                               M1  常量（视图 ID、文件名、默认值）
+├── settings.ts                                M1  设置面板
+│
+├── storage/                                   M2  数据持久化
+│   ├── data-store.ts                              泛型存储基类（含写入队列）
+│   ├── schema-store.ts                            tag-schema.json
+│   ├── registry-store.ts                          tag-registry.json + 业务方法
+│   ├── staging-store.ts                           tag-staging.json
+│   ├── queue-store.ts                             verification-queue.json
+│   ├── batch-state-store.ts                       batch-state.json
+│   └── backup-manager.ts                          备份管理
+│
+├── seed/                                      M2  种子数据
+│   ├── seed-schema.ts                             12 type 默认 schema
+│   ├── seed-registry.ts                           ~80 ACM CCS 种子标签
+│   └── initializer.ts                             首次启动初始化（幂等）
+│
+├── engine/                                    M3  纯计算层
+│   ├── schema-resolver.ts                         type→facet 决策树查询
+│   ├── prompt-filter-builder.ts                   候选标签过滤（全量，不截断）
+│   ├── tag-normalizer.ts                          lowercase-hyphenated 规范化
+│   ├── tag-matcher.ts                             registry 标签匹配
+│   ├── frontmatter-service.ts                     YAML 增量合并读写
+│   └── content-hasher.ts                          笔记 body SHA-256 前 8 位
+│
+├── network/                                   M4  网络层
+│   ├── health-checker.ts                          通用健康检查抽象（×4 实例）
+│   ├── network-status-aggregator.ts               红绿灯 + tooltip 聚合
+│   └── http-client.ts                             requestUrl 薄封装
+│
+├── ai/                                        M4  AI 层
+│   ├── generation-provider.ts                     生成接口定义
+│   ├── verification-provider.ts                   验证接口定义
+│   ├── openai-compatible.ts                       单一实现类（配置区分角色）
+│   ├── prompt-assembler.ts                        两步 prompt 组装
+│   ├── ai-response-validator.ts                   校验 + resolveBlacklist()
+│   ├── wikilink-candidate-collector.ts            vault wikilink 去重池
+│   └── rate-limiter.ts                            Token Bucket（按 baseUrl）
+│
+├── verification/                              M4  验证层
+│   ├── wikipedia-client.ts                        Wikipedia REST API
+│   ├── search-client.ts                           搜索 API 抽象
+│   ├── brave-search-adapter.ts                    Brave Search 适配
+│   ├── tavily-search-adapter.ts                   Tavily Search 适配
+│   ├── ai-verifier.ts                             Search→AI 两步验证
+│   ├── verification-pipeline.ts                   两级验证编排
+│   └── verification-queue-manager.ts              离线队列 + 广播更新
+│
+├── operations/                                M5  业务编排
+│   ├── analysis-orchestrator.ts                   7 步分析流程（analyzeNote/analyzeWithType）
+│   ├── tag-operation-executor.ts                  Accept/Delete/Edit/Regenerate/applyAll
+│   └── type-operation-executor.ts                 changeType/addType/deleteType
+│
+├── batch/                                     M7  批量处理
+│   ├── vault-scanner.ts                           文件枚举 + 过滤
+│   ├── batch-processor.ts                         并发控制 + 错误隔离
+│   └── batch-state-manager.ts                     进度持久化 + 恢复
+│
+├── management/                                M8  标签库管理
+│   ├── bulk-yaml-modifier.ts                      全库 YAML 修改 + 崩溃恢复（共用基类）
+│   ├── tag-merger.ts                              标签 A→B 合并
+│   ├── import-export-manager.ts                   registry 导入导出
+│   └── relation-discoverer.ts                     AI 批量补全 relations
+│
+└── ui/                                        M6/M7/M8  UI 层
+    ├── tag-review-view.ts                     M6  ItemView 主视图（Tab 切换）
+    ├── manual-mode-renderer.ts                M6  手动模式
+    ├── ai-mode-renderer.ts                    M6  AI 模式
+    ├── schema-editor-renderer.ts              M6  Schema Editor Tab B
+    ├── batch-status-bar.ts                    M7  状态栏进度项
+    ├── batch-progress-modal.ts                M7  批量进度 Modal
+    ├── tag-browser-modal.ts                   M8  标签浏览器
+    ├── tag-property-editor.ts                 M8  标签属性编辑
+    ├── statistics-panel.ts                    M8  统计面板
+    └── components/                            M6  UI 组件
+        ├── tag-chip.ts                            标签芯片（按 value_type 渲染）
+        ├── facet-section.ts                       facet 区块
+        ├── type-selector.ts                       type 下拉 + 操作按钮
+        ├── network-indicator.ts                   红绿灯 + tooltip
+        ├── candidate-list.ts                      Regenerate 候选浮层
+        ├── schema-type-list.ts                    type 可展开列表
+        ├── schema-facet-editor.ts                 facet 属性编辑
+        └── schema-sync-dialog.ts                  同步确认弹窗
+
+styles.css                                     M6  全局样式（.toot- 前缀）
+```
+
+**共计 55 个源文件**（4 M1 + 10 M2 + 6 M3 + 17 M4 + 3 M5 + 13 M6 + 5 M7 + 7 M8）
+
+### 9.8 关键抽象汇总
+
+| 抽象 | 设计模式 | 核心职责 | 被谁消费 |
+|------|---------|---------|---------|
+| `DataStore<T>` | 泛型基类 + 写入队列 | JSON 文件串行读写，防并发丢失 | 所有 Store 子类 |
+| `HealthChecker` | 策略模式（×4 实例） | 外部服务定时 ping + 状态变更事件 | NetworkStatusAggregator, VerificationPipeline |
+| `OpenAICompatibleProvider` | 单一实现（配置区分） | 统一 OpenAI chat completion 请求/响应 | AnalysisOrchestrator, AIVerifier |
+| `resolveBlacklist()` | 共用工具函数 | 错误值→正确值映射解析 | AIResponseValidator（taxonomy + enum） |
+| `BulkYamlModifier` | 模板方法（共用基类） | 全库 YAML 批量修改 + 崩溃恢复 | TagMerger, Schema Editor sync |
+| `SearchClient` | 适配器模式 | 统一搜索 API 输出格式 | AIVerifier → VerificationPipeline |
+| `FrontmatterService` | 外观模式 | 封装 processFrontMatter 增量合并 | applyAll, BulkYamlModifier, 手动模式 |
+| `PromptFilterBuilder` | 构建器 | Schema × Registry 交集 → 候选子集 | PromptAssembler → AI prompt |
+
 *文档版本：9.0 | 日期：2026-03-16 | 状态：第六轮架构审核完成（7 项修正：黑名单机制重设计、AI 配置简化、Search API 独立、HealthChecker 统一抽象、Schema 同步崩溃恢复、验证失败 flagging、步骤编号消歧义），8 模块开发计划就绪*
