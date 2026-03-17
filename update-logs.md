@@ -132,3 +132,37 @@
 3. **配置极简化**：废弃 provider 选择器，用户直接填写 apiKey/baseUrl/model，插件通过单一 OpenAI-compatible 实现类发送请求
 
 *文档版本：9.0 | 日期：2026-03-16*
+
+---
+
+## 第七轮架构审核修订（2026-03-17）
+
+> 深度审阅完整开发计划后发现 4 个问题，经充分讨论后确认 2 项修正、1 项暂缓、1 项参考实现后修正。
+
+### 已实施的 2 项修正
+
+| # | 问题 | 讨论过程 | 最终修订 | 影响位置 |
+|---|------|---------|---------|---------|
+| 1 | StagingStore 单文件写入队列在批量处理时的 I/O 瓶颈 + VerificationPipeline 批量处理时验证请求无界累积 | 初始分析以 400 篇为场景，提出内存缓存+合并写入方案。用户指出：①"走内存断电就丢了"②本质是 API 限流问题，应控制 batch 规模而非加代码复杂度③为什么一定要 batch 400 篇？限制在 50 篇不行吗？最终合并为一个解决方案 | `data.json` 新增 `max_batch_size` 配置项（默认 50）。`BatchProcessor` 到达上限时自动暂停并 Notice 提示，`OperationLock.release()`。用户通过命令面板重新启动（`skip_tagged` 跳过已打标笔记），逐批推进。50 篇规模下 StagingStore 写入队列和 VerificationPipeline 并发量均在可接受范围 | §3.7, M7 |
+| 2 | Flagged 标签无法从全库 YAML 中批量移除——TagMerger 只支持 A→B 合并不支持 A→nothing 删除 | 参考了 tag-wrangler 实现：标签删除=重命名为空字符串，统一走 rename 流程。但 tag-wrangler 只处理顶层 `tags`/`aliases` 字段（CST 解析），本项目 YAML 是嵌套结构（`academic.domain: [...]`），`processFrontMatter` 操作 JS 对象更适合。确认改动不影响架构，只是 TagMerger 的扩展分支 | TagMerger 增加**删除模式**（target 为空时）：从全库 YAML 中移除标签（`allow_multiple: true` 从数组删元素，空则删 facet 键；`allow_multiple: false` 直接删键）；Registry 中直接删除条目。复用 BulkYamlModifier 崩溃恢复。§2.4 flagged 标签"删除"操作关联到此模式 | §2.4, M8 |
+
+### 暂缓的 1 项
+
+| # | 问题 | 暂缓原因 |
+|---|------|---------|
+| 3 | Edit/Regenerate 的全局黑名单副作用缺少安全防护——用户在一篇笔记的 Edit 操作会永久影响所有后续笔记的 AI 输出，Regenerate 候选中相关但不等价的概念可能被误入黑名单 | 用户判断这本质是标签粒度问题，后续会开发层级标签体系时统一处理，当前阶段不阻断 |
+
+*文档版本：10.0-11.0 | 日期：2026-03-17*
+
+---
+
+## 第八轮架构审核修订（2026-03-17）
+
+> 对第七轮修改进行全量通读复核，发现 2 个因新增功能引入的缺失。
+
+| # | 问题 | 讨论过程 | 最终修订 | 影响位置 |
+|---|------|---------|---------|---------|
+| 1 | RegistryStore 缺少 `deleteTag()` 方法——TagMerger 删除模式最后一步需要"从 Registry 中彻底移除条目"，但 RegistryStore 的 8 个方法中无一能执行此操作。`rejectTag` 需要 `rejected_in_favor_of` 目标标签，删除模式没有目标 | 全量通读时发现，TagMerger 删除模式描述为"直接删除 A 条目"但 RegistryStore 方法列表无对应 API。开发者实现到 Registry 写入步骤时会阻断 | M2 RegistryStore 新增 `deleteTag(label: string): void`——从 registry `tags` 对象中彻底移除条目，递减 `meta.total_tags`。幂等：标签不存在时跳过。M2 测试策略增加对应用例 | M2, M8 |
+| 2 | TagMerger 两种模式均未清理 StagingStore，applyAll 会撤销合并——合并 A→B 后 staging 中残留 A（accepted），用户 applyAll 时 Step 4 `addTag(A)` 会将已被 reject 的 A 重新覆盖为 verified，等于撤销黑名单 | 全量通读时发现，TagMerger 执行步骤（备份→YAML→Registry）全程不涉及 staging。若被操作标签同时存在于 staging 中（批量处理后未审核），残留条目会导致数据不一致 | TagMerger 执行步骤中，YAML 修改与 Registry 写入之间增加 **StagingStore 同步清理**：合并模式→将 staging 中 label A 替换为 B（保留状态不变）；删除模式→移除 staging 中 label A 的条目。M8 测试策略增加 3 条 staging 清理用例（含防撤销验证） | M8 |
+
+*文档版本：12.0 | 日期：2026-03-17*
