@@ -199,6 +199,18 @@ export class StagingStore extends DataStore<Staging> {
     });
   }
 
+  /** 移除指定 type 整块。type 下所有标签数据清除。空笔记条目自动移除。 */
+  async removeType(notePath: string, type: string): Promise<void> {
+    await this.update(data => {
+      const note = data.notes[notePath];
+      if (!note) return;
+      delete note.types[type];
+      if (Object.keys(note.types).length === 0) {
+        delete data.notes[notePath];
+      }
+    });
+  }
+
   /** 内部辅助：沿 notePath → type → facet → label 路径查找条目 */
   private findEntry(
     data: Staging,

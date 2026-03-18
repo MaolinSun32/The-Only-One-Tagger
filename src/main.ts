@@ -31,6 +31,13 @@ import { SearchClient } from './verification/search-client';
 import { AIVerifier } from './verification/ai-verifier';
 import { VerificationPipeline } from './verification/verification-pipeline';
 import { VerificationQueueManager } from './verification/verification-queue-manager';
+// M3 engine (additional)
+import { FrontmatterService } from './engine/frontmatter-service';
+import { ContentHasher } from './engine/content-hasher';
+// M5 operations
+import { AnalysisOrchestrator } from './operations/analysis-orchestrator';
+import { TagOperationExecutor } from './operations/tag-operation-executor';
+import { TypeOperationExecutor } from './operations/type-operation-executor';
 
 export default class TheOnlyOneTagger extends Plugin {
   settings!: TootSettings;
@@ -71,6 +78,15 @@ export default class TheOnlyOneTagger extends Plugin {
   aiVerifier!: AIVerifier;
   verificationPipeline!: VerificationPipeline;
   verificationQueueManager!: VerificationQueueManager;
+
+  // M3 engine (additional)
+  frontmatterService!: FrontmatterService;
+  contentHasher!: ContentHasher;
+
+  // M5 业务编排
+  analysisOrchestrator!: AnalysisOrchestrator;
+  tagOperationExecutor!: TagOperationExecutor;
+  typeOperationExecutor!: TypeOperationExecutor;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -209,6 +225,47 @@ export default class TheOnlyOneTagger extends Plugin {
       stagingStore: this.stagingStore,
       registryStore: this.registryStore,
       networkAggregator: this.networkAggregator,
+    });
+
+    // ── M5 业务编排 ──
+    this.frontmatterService = new FrontmatterService(this.app);
+    this.contentHasher = new ContentHasher(this.app);
+
+    this.analysisOrchestrator = new AnalysisOrchestrator({
+      app: this.app,
+      schemaResolver: this.schemaResolver,
+      generationProvider: this.generationProvider,
+      promptFilterBuilder: this.promptFilterBuilder,
+      frontmatterService: this.frontmatterService,
+      aiResponseValidator: this.aiResponseValidator,
+      stagingStore: this.stagingStore,
+      registryStore: this.registryStore,
+      contentHasher: this.contentHasher,
+      verificationPipeline: this.verificationPipeline,
+      wikilinkCandidateCollector: this.wikilinkCandidateCollector,
+      settings: {
+        max_tags_per_facet: this.settings.max_tags_per_facet,
+        max_wikilink_candidates: this.settings.max_wikilink_candidates,
+      },
+    });
+
+    this.tagOperationExecutor = new TagOperationExecutor({
+      stagingStore: this.stagingStore,
+      registryStore: this.registryStore,
+      frontmatterService: this.frontmatterService,
+      schemaResolver: this.schemaResolver,
+      tagMatcher: this.tagMatcher,
+      generationProvider: this.generationProvider,
+      verificationPipeline: this.verificationPipeline,
+      verificationQueueManager: this.verificationQueueManager,
+      networkStatusAggregator: this.networkAggregator,
+      operationLock: this.operationLock,
+    });
+
+    this.typeOperationExecutor = new TypeOperationExecutor({
+      analysisOrchestrator: this.analysisOrchestrator,
+      stagingStore: this.stagingStore,
+      frontmatterService: this.frontmatterService,
     });
 
     // ── 启动 ──
