@@ -25,14 +25,14 @@ export class SeedInitializer {
 
   private async initializeSchema(): Promise<void> {
     const schema = await this.schemaStore.load();
-    if (Object.keys(schema.note_types).length === 0) {
+    if (!schema.note_types || Object.keys(schema.note_types).length === 0) {
       await this.schemaStore.save(DEFAULT_SCHEMA);
     }
   }
 
   private async initializeRegistry(): Promise<void> {
     const registry = await this.registryStore.load();
-    if (Object.keys(registry.tags).length > 0) return; // 已有数据，保护用户增加的标签
+    if (registry.tags && Object.keys(registry.tags).length > 0) return; // 已有数据，保护用户增加的标签
 
     const now = new Date().toISOString();
     const tags: Record<string, TagEntry> = {};
