@@ -3,12 +3,14 @@ import { App, normalizePath, type PluginManifest } from 'obsidian';
 /**
  * 泛型存储基类，封装 adapter.read/write + JSON 序列化。
  * 内置 Promise 链写入队列，保证并发 update() 串行执行且错误隔离。
+ * 提供 on/off('change') 事件，update() 成功后自动触发。
  */
 export class DataStore<T> {
   protected filePath: string;
   protected defaultValue: T;
   protected app: App;
   private writeQueue: Promise<void> = Promise.resolve();
+  private changeListeners: Array<() => void> = [];
 
   constructor(app: App, manifest: PluginManifest, fileName: string, defaultValue: T) {
     this.app = app;
@@ -61,6 +63,7 @@ export class DataStore<T> {
             const data = await this.load();
             mutator(data);
             await this.save(data);
+            this.emitChange();
             resolve();
           } catch (err) {
             reject(err);
@@ -68,5 +71,22 @@ export class DataStore<T> {
           }
         });
     });
+  }
+
+  /** 订阅数据变更事件（update 成功后触发） */
+  on(_event: 'change', callback: () => void): void {
+    this.changeListeners.push(callback);
+  }
+
+  /** 取消订阅数据变更事件 */
+  off(_event: 'change', callback: () => void): void {
+    const idx = this.changeListeners.indexOf(callback);
+    if (idx !== -1) this.changeListeners.splice(idx, 1);
+  }
+
+  private emitChange(): void {
+    for (const cb of this.changeListeners) {
+      try { cb(); } catch (e) { console.error('[TOOT] DataStore change listener error', e); }
+    }
   }
 }

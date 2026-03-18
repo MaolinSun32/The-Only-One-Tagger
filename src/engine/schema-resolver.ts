@@ -15,6 +15,11 @@ import type {
 export class SchemaResolver {
   constructor(private schema: Schema) {}
 
+  /** 热更新内存中的 schema 快照（Schema Editor 保存后调用） */
+  reload(schema: Schema): void {
+    this.schema = schema;
+  }
+
   /**
    * Resolve a note type to its full facet definitions.
    * Throws if the type does not exist in the schema.

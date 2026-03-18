@@ -85,6 +85,31 @@ export class TagOperationExecutor {
     oldTag: string,
     newTag: string,
   ): Promise<void> {
+    await this.replaceWithNewTag(notePath, type, facet, oldTag, newTag);
+  }
+
+  /** 选择 regenerate 候选后确认替换（逻辑同 edit，仅语义区分） */
+  async confirmRegenerate(
+    notePath: string,
+    type: string,
+    facet: string,
+    oldTag: string,
+    selectedCandidate: string,
+  ): Promise<void> {
+    await this.replaceWithNewTag(notePath, type, facet, oldTag, selectedCandidate);
+  }
+
+  /**
+   * 内部共用方法：用新标签替换旧标签。
+   * edit() 和 confirmRegenerate() 共享此逻辑。
+   */
+  private async replaceWithNewTag(
+    notePath: string,
+    type: string,
+    facet: string,
+    oldTag: string,
+    newTag: string,
+  ): Promise<void> {
     // 1. 正规化
     const normalizedNew = TagNormalizer.normalize(newTag);
 
@@ -120,7 +145,7 @@ export class TagOperationExecutor {
       label: finalLabel,
       badge,
       user_status: 'accepted',
-      ai_recommended: true, // edit 是用户主动操作，始终标记为 true
+      ai_recommended: true,
       replaces,
     };
 
@@ -132,7 +157,7 @@ export class TagOperationExecutor {
       if (this.deps.networkStatusAggregator.isFullyOnline()) {
         this.deps.verificationPipeline
           .verifyTags([{ label: finalLabel, facet, notePath, type }])
-          .catch(e => console.error('[TOOT] Edit verification failed', e));
+          .catch(e => console.error('[TOOT] Tag replacement verification failed', e));
       } else {
         await this.deps.verificationQueueManager.enqueue({
           tag_label: finalLabel,
