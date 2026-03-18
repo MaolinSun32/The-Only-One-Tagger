@@ -1,1 +1,1414 @@
 /* The Only One Tagger — all classes use .toot- prefix */
+
+/* ── View container ── */
+.toot-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Tab bar ── */
+.toot-tab-bar {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.toot-tab-btn {
+  flex: 1;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.toot-tab-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.toot-tab-btn--active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.toot-tab-btn--active:hover {
+  background: var(--interactive-accent-hover);
+}
+
+/* ── Content area ── */
+.toot-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* ── Network indicator ── */
+.toot-network-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.toot-network-indicator:hover {
+  background: var(--background-modifier-hover);
+}
+
+.toot-network-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.toot-network-dot--online {
+  background: var(--color-green);
+}
+
+.toot-network-dot--offline {
+  background: var(--color-red);
+}
+
+.toot-network-dot--refreshing {
+  animation: toot-pulse 0.8s ease infinite;
+}
+
+@keyframes toot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ── Tag chip ── */
+.toot-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 12px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 2px;
+  transition: all 0.15s;
+}
+
+.toot-tag-chip--accepted {
+  background: color-mix(in srgb, var(--color-green) 15%, var(--background-secondary));
+  border-color: var(--color-green);
+}
+
+.toot-tag-chip--deleted {
+  background: color-mix(in srgb, var(--color-red) 10%, var(--background-secondary));
+  border-color: var(--color-red);
+  opacity: 0.6;
+}
+
+.toot-tag-chip--deleted .toot-tag-label {
+  text-decoration: line-through;
+}
+
+.toot-tag-chip--editing {
+  border-color: var(--interactive-accent);
+}
+
+/* ── Badge dots ── */
+.toot-badge {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.toot-badge--verifying {
+  background: var(--text-faint);
+  animation: toot-spin 1.2s linear infinite;
+}
+
+.toot-badge--registry {
+  background: var(--color-green);
+}
+
+.toot-badge--wiki-verified,
+.toot-badge--search-verified {
+  background: var(--color-blue);
+}
+
+.toot-badge--needs-review {
+  background: var(--color-yellow);
+}
+
+@keyframes toot-spin {
+  0% { box-shadow: 0 0 0 0 var(--text-faint); }
+  50% { box-shadow: 0 0 4px 2px var(--text-faint); }
+  100% { box-shadow: 0 0 0 0 var(--text-faint); }
+}
+
+/* ── Tag label & actions ── */
+.toot-tag-label {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toot-tag-not-recommended {
+  font-size: 10px;
+  color: var(--text-faint);
+  background: var(--background-modifier-border);
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.toot-tag-actions {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 2px;
+}
+
+.toot-tag-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 3px;
+  color: var(--text-muted);
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.toot-tag-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.toot-tag-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.toot-tag-btn--accept:hover { color: var(--color-green); }
+.toot-tag-btn--delete:hover { color: var(--color-red); }
+.toot-tag-btn--edit:hover { color: var(--color-blue); }
+.toot-tag-btn--regenerate:hover { color: var(--color-orange); }
+
+.toot-tag-edit-input {
+  width: 100px;
+  padding: 1px 4px;
+  font-size: 12px;
+  border: 1px solid var(--interactive-accent);
+  border-radius: 3px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+/* ── Non-taxonomy tag inputs ── */
+.toot-tag-enum-select,
+.toot-tag-freetext-input,
+.toot-tag-wikilink-input,
+.toot-tag-date-input {
+  font-size: 12px;
+  padding: 1px 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  max-width: 120px;
+}
+
+.toot-tag-wikilink-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.toot-tag-wikilink-bracket {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+/* ── Wikilink suggest ── */
+.toot-wikilink-suggest {
+  position: absolute;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  max-height: 150px;
+  overflow-y: auto;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.toot-wikilink-suggest-item {
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.toot-wikilink-suggest-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+/* ── Facet section ── */
+.toot-facet-section {
+  margin-bottom: 12px;
+}
+
+.toot-facet-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.toot-facet-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-normal);
+}
+
+.toot-facet-type-badge {
+  font-size: 10px;
+  color: var(--text-faint);
+  background: var(--background-secondary);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.toot-facet-required {
+  font-size: 10px;
+  color: var(--color-orange);
+}
+
+.toot-facet-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.toot-facet-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.toot-facet-add-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: none;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.toot-facet-add-btn:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+.toot-facet-add-ui {
+  margin-top: 4px;
+}
+
+.toot-facet-add-input,
+.toot-facet-add-select {
+  font-size: 12px;
+  padding: 2px 6px;
+  border: 1px solid var(--interactive-accent);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+/* ── Type selector ── */
+.toot-type-selector {
+  margin-bottom: 12px;
+}
+
+.toot-type-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.toot-type-label {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-accent);
+}
+
+.toot-type-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.toot-type-btn {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.toot-type-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.toot-type-btn--danger:hover {
+  color: var(--color-red);
+}
+
+.toot-type-select,
+.toot-type-empty-hint {
+  font-size: 12px;
+}
+
+.toot-type-add-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: none;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.toot-type-add-btn:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+/* ── Type block ── */
+.toot-type-block {
+  margin-bottom: 16px;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+}
+
+.toot-type-block-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-accent);
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+/* ── Header / Footer ── */
+.toot-manual-header,
+.toot-ai-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.toot-analyze-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  cursor: pointer;
+}
+
+.toot-analyze-btn:hover {
+  background: var(--interactive-accent-hover);
+}
+
+.toot-analyze-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toot-ai-footer,
+.toot-manual-footer {
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+  flex-wrap: wrap;
+}
+
+.toot-apply-btn {
+  padding: 6px 16px;
+  font-size: 13px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.toot-apply-btn:hover {
+  background: var(--interactive-accent-hover);
+}
+
+.toot-apply-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toot-bulk-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.toot-bulk-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+.toot-bulk-btn--accept:hover { color: var(--color-green); }
+.toot-bulk-btn--delete:hover { color: var(--color-red); }
+
+/* ── Content changed banner ── */
+.toot-content-changed-banner {
+  background: color-mix(in srgb, var(--color-yellow) 15%, var(--background-primary));
+  border: 1px solid var(--color-yellow);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  width: 100%;
+}
+
+.toot-content-changed-banner a {
+  color: var(--interactive-accent);
+  cursor: pointer;
+  margin-left: 4px;
+}
+
+/* ── Candidate list ── */
+.toot-candidate-list {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 200;
+  min-width: 140px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.toot-candidate-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.toot-candidate-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.toot-candidate-radio {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--text-faint);
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.toot-candidate-loading {
+  padding: 8px 10px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+/* ── Empty / waiting states ── */
+.toot-empty-state,
+.toot-batch-waiting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
+}
+
+/* ── Schema editor ── */
+.toot-schema-editor {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.toot-schema-layout {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.toot-schema-sidebar {
+  flex: 1;
+  overflow-y: auto;
+  border-right: 1px solid var(--background-modifier-border);
+  padding-right: 8px;
+}
+
+.toot-schema-detail {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.toot-schema-detail-hint {
+  color: var(--text-faint);
+  font-size: 12px;
+  padding: 20px;
+  text-align: center;
+}
+
+.toot-schema-lock-banner {
+  background: color-mix(in srgb, var(--color-yellow) 15%, var(--background-primary));
+  border: 1px solid var(--color-yellow);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+/* Schema type list */
+.toot-schema-type-item {
+  margin-bottom: 4px;
+}
+
+.toot-schema-type-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.toot-schema-type-header:hover {
+  background: var(--background-modifier-hover);
+}
+
+.toot-schema-toggle {
+  font-size: 10px;
+  color: var(--text-faint);
+  width: 12px;
+}
+
+.toot-schema-type-name {
+  font-weight: 600;
+  font-size: 13px;
+  flex: 1;
+}
+
+.toot-schema-type-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.toot-schema-type-body {
+  padding-left: 20px;
+  margin-bottom: 8px;
+}
+
+.toot-schema-facet-group {
+  margin-bottom: 6px;
+}
+
+.toot-schema-facet-group-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.toot-schema-facet-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.toot-schema-facet-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.toot-schema-facet-name {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-accent);
+}
+
+.toot-schema-facet-name:hover {
+  text-decoration: underline;
+}
+
+.toot-schema-facet-vtype {
+  font-size: 10px;
+  color: var(--text-faint);
+  background: var(--background-secondary);
+  padding: 0 3px;
+  border-radius: 2px;
+}
+
+.toot-schema-facet-actions {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.toot-schema-facet-add-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.toot-schema-btn {
+  font-size: 11px;
+  padding: 1px 6px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.toot-schema-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.toot-schema-btn--danger:hover {
+  color: var(--color-red);
+}
+
+.toot-schema-add-type-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: none;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.toot-schema-add-type-btn:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+/* Schema facet editor */
+.toot-schema-facet-editor,
+.toot-schema-type-editor {
+  padding: 8px;
+}
+
+.toot-schema-facet-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.toot-schema-field {
+  margin-bottom: 10px;
+}
+
+.toot-schema-field-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.toot-schema-input {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.toot-schema-textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 4px 6px;
+  font-size: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  resize: vertical;
+}
+
+.toot-schema-readonly {
+  font-size: 12px;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.toot-schema-save-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.toot-schema-enum-section {
+  margin-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 8px;
+}
+
+.toot-schema-enum-list {
+  margin-bottom: 6px;
+}
+
+.toot-schema-enum-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.toot-schema-enum-add {
+  display: flex;
+  gap: 4px;
+}
+
+/* ── Sync dialog ── */
+.toot-sync-dialog {
+  max-width: 480px;
+}
+
+.toot-sync-desc {
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.toot-sync-file-list {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+  padding: 6px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+}
+
+.toot-sync-file-item {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 1px 0;
+}
+
+.toot-sync-file-more {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.toot-sync-count {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.toot-sync-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.toot-sync-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  cursor: pointer;
+}
+
+.toot-sync-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+/* ══════════════════════════════════════════════
+   M7 — 批量处理
+   ══════════════════════════════════════════════ */
+
+/* ── Batch status bar ── */
+.toot-batch-status {
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.toot-batch-status:hover {
+  color: var(--text-normal);
+}
+
+/* ── Batch progress modal ── */
+.toot-batch-progress-modal {
+  max-width: 600px;
+}
+
+.toot-batch-progress-section {
+  margin-bottom: 12px;
+}
+
+.toot-batch-progress-bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.toot-batch-progress-bar::-webkit-progress-bar {
+  background: var(--background-secondary);
+  border-radius: 4px;
+}
+
+.toot-batch-progress-bar::-webkit-progress-value {
+  background: var(--interactive-accent);
+  border-radius: 4px;
+}
+
+.toot-batch-progress-text {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 4px;
+}
+
+.toot-batch-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.toot-batch-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  cursor: pointer;
+  color: var(--text-normal);
+}
+
+.toot-batch-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+.toot-batch-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toot-batch-btn-danger {
+  color: var(--color-red);
+}
+
+.toot-batch-btn-danger:hover {
+  background: color-mix(in srgb, var(--color-red) 10%, var(--background-secondary));
+}
+
+.toot-batch-list-container {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.toot-batch-group {
+  margin-bottom: 8px;
+}
+
+.toot-batch-group-header {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-normal);
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.toot-batch-group-header:hover {
+  background: var(--background-modifier-hover);
+}
+
+.toot-batch-group-content {
+  padding-left: 8px;
+}
+
+.toot-batch-note-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  font-size: 12px;
+  border-radius: 3px;
+}
+
+.toot-batch-note-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.toot-batch-note-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toot-batch-note-count {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.toot-batch-note-failed {
+  color: var(--color-red);
+}
+
+.toot-batch-btn-small {
+  font-size: 11px;
+  padding: 1px 6px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.toot-batch-btn-small:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+/* ══════════════════════════════════════════════
+   M8 — 标签库管理
+   ══════════════════════════════════════════════ */
+
+/* ── Tag browser modal ── */
+.toot-tag-browser-modal {
+  max-width: 800px;
+  min-height: 500px;
+}
+
+.toot-tag-browser-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.toot-tag-browser-tools {
+  display: flex;
+  gap: 4px;
+}
+
+.toot-tag-browser-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  cursor: pointer;
+  color: var(--text-normal);
+}
+
+.toot-tag-browser-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+.toot-tag-browser-search {
+  margin-bottom: 8px;
+}
+
+.toot-tag-browser-search-input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.toot-tag-browser-filters {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.toot-tag-browser-select {
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.toot-tag-browser-checkbox-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toot-tag-browser-main {
+  display: flex;
+  gap: 12px;
+  min-height: 300px;
+}
+
+.toot-tag-browser-list {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.toot-tag-browser-detail {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.toot-tag-browser-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 3px;
+  cursor: default;
+}
+
+.toot-tag-browser-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.toot-tag-browser-icon {
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.toot-tag-browser-label {
+  font-weight: 500;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toot-tag-browser-facets {
+  font-size: 11px;
+  color: var(--text-faint);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toot-tag-browser-usage {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.toot-tag-browser-redirect {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.toot-tag-browser-arrow {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+.toot-tag-browser-arrow:hover {
+  color: var(--interactive-accent);
+}
+
+.toot-tag-browser-empty {
+  color: var(--text-faint);
+  text-align: center;
+  padding: 20px;
+}
+
+.toot-tag-browser-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.toot-tag-browser-page-btn {
+  padding: 2px 8px;
+  font-size: 12px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.toot-tag-browser-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toot-tag-browser-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.toot-tag-browser-relation-diff {
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* ── Tag property editor ── */
+.toot-tag-property-panel {
+  font-size: 13px;
+}
+
+.toot-tag-property-header h3 {
+  margin: 0 0 8px 0;
+}
+
+.toot-tag-property-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.toot-tag-property-flagged {
+  color: var(--color-orange);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toot-tag-property-section {
+  margin-bottom: 12px;
+}
+
+.toot-tag-property-section h4 {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 4px 0;
+}
+
+.toot-tag-property-pill-list,
+.toot-tag-property-pill-list-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.toot-tag-property-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.toot-tag-property-pill-remove {
+  cursor: pointer;
+  color: var(--text-faint);
+  font-size: 14px;
+}
+
+.toot-tag-property-pill-remove:hover {
+  color: var(--color-red);
+}
+
+.toot-tag-property-relation-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.toot-tag-property-relation-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 60px;
+  text-transform: capitalize;
+}
+
+.toot-tag-property-input {
+  padding: 3px 8px;
+  font-size: 12px;
+  border: 1px solid var(--interactive-accent);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  width: 150px;
+}
+
+.toot-tag-property-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  cursor: pointer;
+  color: var(--text-normal);
+}
+
+.toot-tag-property-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+.toot-tag-property-btn-danger {
+  color: var(--color-red);
+}
+
+.toot-tag-property-btn-danger:hover {
+  background: color-mix(in srgb, var(--color-red) 10%, var(--background-secondary));
+}
+
+.toot-tag-property-btn-small {
+  font-size: 11px;
+  padding: 1px 6px;
+  background: none;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.toot-tag-property-btn-small:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+.toot-tag-property-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+/* ── Statistics panel ── */
+.toot-statistics-panel {
+  font-size: 13px;
+}
+
+.toot-statistics-summary {
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.toot-statistics-section {
+  margin-bottom: 16px;
+}
+
+.toot-statistics-section h4 {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 6px 0;
+}
+
+.toot-statistics-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.toot-statistics-bar-label {
+  width: 120px;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toot-statistics-bar-container {
+  flex: 1;
+  height: 6px;
+  background: var(--background-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.toot-statistics-bar {
+  height: 100%;
+  background: var(--interactive-accent);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.toot-statistics-bar-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 30px;
+  text-align: right;
+}
+
+.toot-statistics-orphan-list {
+  font-size: 12px;
+  color: var(--text-faint);
+}

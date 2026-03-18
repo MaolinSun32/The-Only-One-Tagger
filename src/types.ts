@@ -334,3 +334,102 @@ export interface TagGenContext {
 
 /** facet → tags 映射（AI 输出原始格式） */
 export type FacetTagMap = Record<string, string | string[]>;
+
+// ────────────────────────────────────────────
+// M7 批量处理相关
+// ────────────────────────────────────────────
+
+/** VaultScanner 扫描过滤条件 */
+export interface ScanFilter {
+  folders: string[];
+  excludeFolders?: string[];
+  skip_tagged: boolean;
+}
+
+/** BatchProcessor 进度事件数据 */
+export interface BatchProgressEvent {
+  processed: number;
+  total: number;
+  current_file: string;
+  failed_count: number;
+}
+
+// ────────────────────────────────────────────
+// M8 批量 YAML 修改相关
+// ────────────────────────────────────────────
+
+/** BulkYamlModifier 执行结果 */
+export interface BulkModifyResult {
+  total: number;
+  completed: number;
+  failed: number;
+  failedFiles: Record<string, string>;
+}
+
+/** BulkYamlModifier 中断恢复信息 */
+export interface IncompleteState {
+  pendingFiles: string[];
+  completedFiles: string[];
+  context: any;
+}
+
+// ────────────────────────────────────────────
+// M8 标签合并相关
+// ────────────────────────────────────────────
+
+/** TagMerger 合并/删除选项 */
+export interface MergeOptions {
+  sourceTag: string;
+  targetTag: string | null;
+}
+
+/** TagMerger dry-run 预览结果 */
+export interface DryRunResult {
+  affectedFiles: Array<{ path: string; changes: string }>;
+  totalAffected: number;
+}
+
+// ────────────────────────────────────────────
+// M8 导入导出相关
+// ────────────────────────────────────────────
+
+/** 导入冲突条目 */
+export interface ImportConflict {
+  label: string;
+  existing: TagEntry;
+  incoming: TagEntry;
+}
+
+/** 导入冲突处理策略 */
+export type ImportStrategy = 'overwrite' | 'skip' | 'manual';
+
+// ────────────────────────────────────────────
+// M8 统计相关
+// ────────────────────────────────────────────
+
+/** 标签库统计数据 */
+export interface TagStatistics {
+  totalTags: number;
+  verifiedCount: number;
+  rejectedCount: number;
+  flaggedCount: number;
+  usageFrequency: Array<{ label: string; count: number }>;
+  orphanTags: string[];
+  facetDistribution: Record<string, number>;
+}
+
+// ────────────────────────────────────────────
+// M8 关系发现相关
+// ────────────────────────────────────────────
+
+/** RelationDiscoverer 关系 diff */
+export interface RelationDiff {
+  label: string;
+  current: TagRelations;
+  suggested: TagRelations;
+  added: {
+    broader: string[];
+    narrower: string[];
+    related: string[];
+  };
+}

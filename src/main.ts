@@ -1,6 +1,6 @@
-import { Plugin } from 'obsidian';
+import { Plugin, Notice, normalizePath, type WorkspaceLeaf } from 'obsidian';
 import type { TootSettings } from './types';
-import { DEFAULT_SETTINGS } from './constants';
+import { DEFAULT_SETTINGS, TOOT_VIEW_TYPE, MERGE_STATE_FILE } from './constants';
 import { OperationLock } from './operation-lock';
 import { SchemaStore } from './storage/schema-store';
 import { RegistryStore } from './storage/registry-store';
@@ -38,6 +38,20 @@ import { ContentHasher } from './engine/content-hasher';
 import { AnalysisOrchestrator } from './operations/analysis-orchestrator';
 import { TagOperationExecutor } from './operations/tag-operation-executor';
 import { TypeOperationExecutor } from './operations/type-operation-executor';
+// M6 UI
+import { TagReviewView } from './ui/tag-review-view';
+// M7 batch
+import { VaultScanner } from './batch/vault-scanner';
+import { BatchProcessor } from './batch/batch-processor';
+import { BatchStateManager } from './batch/batch-state-manager';
+import { BatchStatusBarItem } from './ui/batch-status-bar';
+import { BatchProgressModal } from './ui/batch-progress-modal';
+// M8 management
+import { TagMerger } from './management/tag-merger';
+import { ImportExportManager } from './management/import-export-manager';
+import { RelationDiscoverer } from './management/relation-discoverer';
+import { TagBrowserModal } from './ui/tag-browser-modal';
+import { StatisticsPanel } from './ui/statistics-panel';
 
 export default class TheOnlyOneTagger extends Plugin {
   settings!: TootSettings;
@@ -87,6 +101,18 @@ export default class TheOnlyOneTagger extends Plugin {
   analysisOrchestrator!: AnalysisOrchestrator;
   tagOperationExecutor!: TagOperationExecutor;
   typeOperationExecutor!: TypeOperationExecutor;
+
+  // M7 批量处理
+  vaultScanner!: VaultScanner;
+  batchStateManager!: BatchStateManager;
+  batchProcessor!: BatchProcessor;
+  batchStatusBarItem!: BatchStatusBarItem;
+
+  // M8 标签库管理
+  tagMerger!: TagMerger;
+  importExportManager!: ImportExportManager;
+  relationDiscoverer!: RelationDiscoverer;
+  statisticsPanel!: StatisticsPanel;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -276,16 +302,167 @@ export default class TheOnlyOneTagger extends Plugin {
     this.verificationQueueManager.start();
     await this.verificationQueueManager.cleanupOnStartup();
 
+    // ── M6 UI ──
+    this.registerView(TOOT_VIEW_TYPE, (leaf) => new TagReviewView(leaf, this));
+
+    this.addRibbonIcon('tags', 'The Only One Tagger', () => {
+      this.activateView();
+    });
+
+    this.addCommand({
+      id: 'open-tag-review',
+      name: '打开标签审核侧边栏',
+      callback: () => { this.activateView(); },
+    });
+
+    this.addCommand({
+      id: 'analyze-current-note',
+      name: '分析当前笔记',
+      checkCallback: (checking: boolean) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file || file.extension !== 'md') return false;
+        if (checking) return true;
+        this.analysisOrchestrator.analyzeNote(file);
+        return true;
+      },
+    });
+
+    // ── M7 批量处理 ──
+    this.vaultScanner = new VaultScanner(this.app);
+    this.batchStateManager = new BatchStateManager(this.batchStateStore);
+    this.batchProcessor = new BatchProcessor(
+      this.analysisOrchestrator,
+      this.rateLimiter,
+      this.batchStateManager,
+      this.operationLock,
+      this.settings,
+    );
+
+    const statusBarEl = this.addStatusBarItem();
+    this.batchStatusBarItem = new BatchStatusBarItem(
+      statusBarEl,
+      this.batchProcessor,
+      () => new BatchProgressModal(
+        this.app,
+        this.batchProcessor,
+        this.batchStateManager,
+        this.stagingStore,
+        this.analysisOrchestrator,
+      ).open(),
+    );
+
+    this.addCommand({
+      id: 'batch-tag',
+      name: '批量打标',
+      callback: () => {
+        const files = this.vaultScanner.scan({
+          folders: [],
+          skip_tagged: true,
+        });
+        if (files.length === 0) {
+          new Notice('没有需要处理的笔记');
+          return;
+        }
+        this.batchProcessor.start(files, { folders: [], skip_tagged: true });
+        this.batchStatusBarItem.show();
+      },
+    });
+
+    // ── M8 标签库管理 ──
+    const mergeStatePath = normalizePath(this.manifest.dir + '/' + MERGE_STATE_FILE);
+    this.tagMerger = new TagMerger(
+      this.app,
+      mergeStatePath,
+      this.registryStore,
+      this.stagingStore,
+      this.frontmatterService,
+      this.backupManager,
+      this.operationLock,
+      this.schemaResolver,
+    );
+    this.importExportManager = new ImportExportManager(this.registryStore);
+    this.statisticsPanel = new StatisticsPanel(this.app, this.registryStore);
+    this.relationDiscoverer = new RelationDiscoverer(
+      this.registryStore,
+      this.httpClient,
+      this.rateLimiter,
+      {
+        apiKey: this.settings.generation_api_key,
+        baseUrl: this.settings.generation_base_url,
+        model: this.settings.generation_model,
+        temperature: this.settings.generation_temperature,
+      },
+    );
+
+    this.addCommand({
+      id: 'open-tag-browser',
+      name: '标签库浏览器',
+      callback: () => {
+        new TagBrowserModal(
+          this.app,
+          this.registryStore,
+          this.tagMerger,
+          this.importExportManager,
+          this.statisticsPanel,
+          this.relationDiscoverer,
+        ).open();
+      },
+    });
+
+    // ── 启动恢复检测 ──
+    this.detectAndRecoverIncomplete();
+
     // 设置面板
     this.addSettingTab(new TootSettingTab(this.app, this));
   }
 
   onunload(): void {
+    this.app.workspace.detachLeavesOfType(TOOT_VIEW_TYPE);
     this.generationChecker.stop();
     this.verificationChecker.stop();
     this.searchChecker.stop();
     this.wikipediaChecker.stop();
     this.verificationQueueManager.stop();
+
+    // M7 cleanup
+    if (this.batchProcessor?.getState() === 'running') {
+      this.batchProcessor.terminate();
+    }
+    this.batchStatusBarItem?.hide();
+  }
+
+  /** M7/M8 启动恢复检测（fire-and-forget） */
+  private async detectAndRecoverIncomplete(): Promise<void> {
+    try {
+      // M7: 批量处理恢复
+      if (await this.batchStateManager.hasIncomplete()) {
+        new Notice('检测到未完成的批量处理任务。可通过命令面板"批量打标"继续。', 8000);
+        this.batchStatusBarItem.show();
+        this.batchStatusBarItem.update(0, 0);
+      }
+
+      // M8: 标签合并恢复
+      const mergeIncomplete = await this.tagMerger.detectIncomplete();
+      if (mergeIncomplete) {
+        new Notice('检测到未完成的标签合并操作，正在自动恢复...', 5000);
+        const result = await this.tagMerger.resume(mergeIncomplete.context);
+        new Notice(`标签合并恢复完成：${result.completed} 成功，${result.failed} 失败`);
+      }
+    } catch (e) {
+      console.error('[TOOT] Startup recovery failed', e);
+    }
+  }
+
+  async activateView(): Promise<void> {
+    const { workspace } = this.app;
+    let leaf = workspace.getLeavesOfType(TOOT_VIEW_TYPE)[0];
+    if (!leaf) {
+      const rightLeaf = workspace.getRightLeaf(false);
+      if (!rightLeaf) return;
+      await rightLeaf.setViewState({ type: TOOT_VIEW_TYPE, active: true });
+      leaf = rightLeaf;
+    }
+    workspace.revealLeaf(leaf);
   }
 
   async loadSettings(): Promise<void> {
