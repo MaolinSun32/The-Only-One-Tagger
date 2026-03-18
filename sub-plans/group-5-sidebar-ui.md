@@ -164,13 +164,13 @@ interface NoteTypeSchema {
   optional_facets: string[];
 }
 
-// SchemaResolver 返回的解析结果
+// SchemaResolver 返回的解析结果（与 types.ts 一致）
 interface ResolvedSchema {
-  type: string;
+  typeName: string;                              // 注意：字段名是 typeName 不是 type
   label: string;
   description: string;
-  requiredFacets: FacetDefinition[];  // 含 facet 名称和定义
-  optionalFacets: FacetDefinition[];
+  requiredFacets: Record<string, FacetDefinition>;  // key 是 facet 名称
+  optionalFacets: Record<string, FacetDefinition>;
 }
 
 // type 摘要

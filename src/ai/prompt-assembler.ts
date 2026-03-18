@@ -119,7 +119,7 @@ export class PromptAssembler {
    * 保留用户手写字段（如 title、author 等）。
    */
   stripPluginFields(noteContent: string): string {
-    const fmMatch = noteContent.match(/^---\n([\s\S]*?)\n---/);
+    const fmMatch = noteContent.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (!fmMatch) return noteContent;
 
     const fmBlock = fmMatch[1]!;
@@ -129,7 +129,7 @@ export class PromptAssembler {
     const kept: string[] = [];
     let skipIndented = false;
 
-    for (const line of fmBlock.split('\n')) {
+    for (const line of fmBlock.split(/\r?\n/)) {
       // 检查是否为顶层 key（非缩进行）
       const keyMatch = line.match(/^(\w[\w_-]*):/);
       if (keyMatch) {

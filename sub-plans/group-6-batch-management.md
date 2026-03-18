@@ -342,8 +342,11 @@ class SchemaResolver {
 }
 
 interface ResolvedSchema {
-  required: Record<string, FacetDefinition>;
-  optional: Record<string, FacetDefinition>;
+  typeName: string;
+  label: string;
+  description: string;
+  requiredFacets: Record<string, FacetDefinition>;
+  optionalFacets: Record<string, FacetDefinition>;
 }
 ```
 

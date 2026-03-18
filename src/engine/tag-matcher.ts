@@ -1,10 +1,13 @@
 import type { TagMatchResult } from '../types';
 import type { RegistryStore } from '../storage/registry-store';
-import { TagNormalizer } from './tag-normalizer';
 
 /**
  * Orchestrates tag matching against the registry.
- * Two-step flow: normalize input → exact label lookup → alias lookup.
+ * Two-step flow: exact label lookup → alias lookup.
+ *
+ * Caller is responsible for normalizing input before calling match()
+ * (via TagNormalizer). This avoids double-normalization when the caller
+ * (e.g., AIResponseValidator) already normalizes as part of its pipeline.
  *
  * RegistryStore handles data access; TagMatcher owns the matching strategy.
  */
@@ -12,18 +15,17 @@ export class TagMatcher {
   constructor(private registryStore: RegistryStore) {}
 
   /**
-   * Match an input string against the registry.
+   * Match a pre-normalized label against the registry.
    *
-   * 1. Normalize input via TagNormalizer
-   * 2. Exact label lookup via RegistryStore.getTag()
-   * 3. Alias lookup via RegistryStore.findByAlias()
-   * 4. Return result with matched entry (includes status for caller to distinguish verified/rejected)
+   * 1. Exact label lookup via RegistryStore.getTag()
+   * 2. Alias lookup via RegistryStore.findByAlias()
+   * 3. Return result with matched entry (includes status for caller to distinguish verified/rejected)
    *
+   * Input MUST be pre-normalized by the caller (TagNormalizer.normalize()).
    * Returns { matched: false } on miss.
-   * Caller checks entry.status to handle verified vs rejected tags.
    */
   async match(input: string): Promise<TagMatchResult> {
-    const normalized = TagNormalizer.normalize(input);
+    const normalized = input;
 
     if (normalized === '') {
       return { matched: false };

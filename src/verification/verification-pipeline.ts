@@ -103,9 +103,14 @@ export class VerificationPipeline {
   }
 
   private async finalize(tag: VerifyTagInput, badge: BadgeType): Promise<void> {
-    await this.deps.stagingStore.updateTagBadge(
-      tag.notePath, tag.type, tag.facet, tag.label, badge,
-    );
+    // 队列重试时 type 为空（队列按 tag_label 去重，不含 type 信息），
+    // 此时跳过 per-note 更新——由 VerificationQueueManager.broadcastResult()
+    // 通过 findAndUpdateTagGlobally 全局更新所有 staging 条目
+    if (tag.type) {
+      await this.deps.stagingStore.updateTagBadge(
+        tag.notePath, tag.type, tag.facet, tag.label, badge,
+      );
+    }
 
     const event: TagVerifiedEvent = {
       label: tag.label,

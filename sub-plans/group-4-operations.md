@@ -520,10 +520,13 @@ interface TagWriteData {
   typeData: Record<string, Record<string, any>>;
 }
 
-// === SchemaResolver 返回值 ===
+// === SchemaResolver 返回值（与 types.ts 一致）===
 interface ResolvedSchema {
-  required_facets: FacetDefinition[];
-  optional_facets: FacetDefinition[];
+  typeName: string;
+  label: string;
+  description: string;
+  requiredFacets: Record<string, FacetDefinition>;
+  optionalFacets: Record<string, FacetDefinition>;
 }
 
 interface FacetDefinition {
