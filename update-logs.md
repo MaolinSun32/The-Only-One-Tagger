@@ -224,3 +224,20 @@
 3. **组合边缘情况**：#3 需要同时满足"同义词共存于 staging"+"TagMerger 合并"两个条件，批量处理学术笔记时会遇到
 
 *文档版本：14.0 | 日期：2026-03-18*
+
+---
+
+## 第十一轮架构审核修订（2026-03-18）
+
+> 第十轮引入 TagMatcher 集成后的数据访问层缺口补全。1 项修正。
+
+| # | 问题 | 讨论过程 | 最终修订 | 影响位置 |
+|---|------|---------|---------|---------|
+| 1 | RegistryStore 的 9 个方法中没有支持 TagMatcher 别名匹配的 API——`getTag(label)` 只做精确 label 查找，无法遍历 aliases 数组 | 审核方提出两个方案：A. RegistryStore 增加 findByAlias() 纯数据查询方法；B. 将 TagMatcher 合并进 RegistryStore。用户驳回方案 B——TagMatcher 依赖 TagNormalizer（M3），合并进 RegistryStore（M2）会引入 M2→M3 上行依赖。采用方案 A 的修正变体：RegistryStore 只加纯数据查询的 `findByAlias()`（不含规范化），匹配策略和规范化由 TagMatcher 编排 | RegistryStore 增加第 10 个方法 `findByAlias(alias): TagEntry \| null`。TagMatcher 匹配流程明确为 `getTag()` → `findByAlias()` 两步调用。§9.5 流程 A 步骤 6 同步更新为含 TagMatcher 的新描述 | M2, M3, §9.5 |
+
+### 本轮审核模式特征
+
+1. **第十轮引入的缺口补全**：TagMatcher 集成是第十轮的核心修正，但只定义了"谁调用 TagMatcher"而未检查"TagMatcher 需要什么数据"。这是典型的接口定义与数据访问层脱节
+2. **层级纪律的价值**：方案 B（合并 TagMatcher 进 RegistryStore）看似减少一个类，但引入 M2→M3 上行依赖。第六轮确立的"下层不依赖上层"原则在此处发挥了设计约束作用
+
+*文档版本：15.0 | 日期：2026-03-18*
