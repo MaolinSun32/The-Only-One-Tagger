@@ -11,7 +11,8 @@
       "Bash(find \"D:\\\\Vault-4\\\\Projects\\\\obsidian-sample-plugin\" -type f \\\\\\( -name \"*.json\" -o -name \"*.md\" \\\\\\) | xargs ls -la)",
       "Bash(grep -r \"sample-plugin\" \"D:\\\\Vault-4\\\\Projects\\\\obsidian-sample-plugin\" --include=\"*.md\" --include=\"*.ts\" 2>/dev/null | head -20)",
       "WebFetch(domain:obsidian.charlespeters.net)",
-      "WebFetch(domain:help.obsidian.md)"
+      "WebFetch(domain:help.obsidian.md)",
+      "Bash(npm run:*)"
     ]
   }
 }

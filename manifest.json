@@ -1,0 +1,9 @@
+{
+	"id": "the-only-one-tagger",
+	"name": "The Only One Tagger",
+	"version": "0.1.0",
+	"minAppVersion": "0.15.0",
+	"description": "AI-powered tag management system with faceted classification",
+	"author": "Smiling",
+	"isDesktopOnly": true
+}
