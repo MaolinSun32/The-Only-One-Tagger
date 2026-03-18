@@ -166,3 +166,61 @@
 | 2 | TagMerger 两种模式均未清理 StagingStore，applyAll 会撤销合并——合并 A→B 后 staging 中残留 A（accepted），用户 applyAll 时 Step 4 `addTag(A)` 会将已被 reject 的 A 重新覆盖为 verified，等于撤销黑名单 | 全量通读时发现，TagMerger 执行步骤（备份→YAML→Registry）全程不涉及 staging。若被操作标签同时存在于 staging 中（批量处理后未审核），残留条目会导致数据不一致 | TagMerger 执行步骤中，YAML 修改与 Registry 写入之间增加 **StagingStore 同步清理**：合并模式→将 staging 中 label A 替换为 B（保留状态不变）；删除模式→移除 staging 中 label A 的条目。M8 测试策略增加 3 条 staging 清理用例（含防撤销验证） | M8 |
 
 *文档版本：12.0 | 日期：2026-03-17*
+
+---
+
+## 第九轮架构审核修订（2026-03-17）
+
+> 深度审阅完整开发计划后发现 9 个问题，经充分讨论后确认 5 项修正、2 项部分接受、1 项暂缓、1 项驳回。聚焦于 applyAll 写入边界、StagingStore 接口契约、手动模式数据流、跨存储原子性、验证管线终态保证。所有修订已写入 dev-plan.md 对应章节。
+
+### 已实施的 7 项修正
+
+| # | 问题 | 讨论过程 | 最终修订 | 影响位置 |
+|---|------|---------|---------|---------|
+| 1 | `applyAll` 不知道应写入哪些 type——`TagWriteData.types` 的构建逻辑未定义，三种解释导致三种结果（数据丢失/正确/意外纳入） | 审核方提出后用户即认可，属数据丢失风险。用户对规则表述做了精确化："至少一个 user_status 为 accepted 或 deleted"比审核方的"至少一个 user_status 非 pending"更精确——排除了 auto-accepted 标签可能带来的边缘情况 | M1 `TagWriteData` 增加 `types` 构建规则：仅包含 staging 中存在至少一个 `user_status` 为 `accepted` 或 `deleted` 的标签的 type。全部 `pending` 且 `ai_recommended: true` 的 type 不纳入，YAML 原样保留 | M1, M5 |
+| 2 | `StagingStore` 没有业务方法定义——被 6+ 个模块同时读写的数据流中枢却只有 `extends DataStore<Staging>`，各模块开发者会各自发明操作方式 | 审核方提出 10 个方法，用户精简为 7 个核心方法。关键设计决策：`findAndUpdateTagGlobally(label, updater)` 统一了审核方的 `bulkReplaceTag`/`bulkRemoveTag`/广播更新三个方法——传入 updater 函数，由调用方决定替换还是移除。`hasUnreviewedData` 由 `getNoteStaging` 导出，不需独立方法 | M2 `StagingStore` 新增 7 个业务方法：`writeNoteResult`、`updateTagStatus`、`updateTagBadge`、`replaceTag`、`getNoteStaging`、`cleanupProcessedTags`、`findAndUpdateTagGlobally`。增加测试策略和验收标准。§9.8 关键抽象汇总表增加 StagingStore | M2, §9.8 |
+| 3 | 手动模式（默认态/离线时）的数据流完全未定义——是直接写 YAML 还是经过 staging，如何与 AI 模式的 staging 数据共存 | 审核方提出"全量加载 YAML 到 staging"方案。用户认为太重，改为轻量方案：staging 有数据时展示 staging（复用 AI 模式），无数据时展示 YAML 只读视图（不创建 staging），新增标签单独进入 staging。避免了每次打开笔记都做 staging 初始化的开销 | M6 手动模式统一走 staging 路径（轻量方案）：staging 有数据→直接展示；无数据→YAML 只读展示+允许添加新标签到 staging。手动模式也有 Apply 按钮。§2.8 同步更新手动模式描述 | §2.8, M6 |
+| 5 | `verified_by` 字符串常量在计划中有两套值——§3.2 为 `wikipedia`/`ai_search`，M5 applyAll 中为 `wiki`/`search` | 审核方提出即认可，文档笔误。用户确认以 §3.2 完整拼写为准 | M1 `types.ts` 增加 `type VerifiedBy = 'seed' \| 'wikipedia' \| 'ai_search' \| 'manual'` 联合类型。M5 `applyAll` step 4 增加 badge→verified_by 映射表：`wiki_verified→wikipedia`、`search_verified→ai_search`、`needs_review→manual` | M1, M5 |
+| 6 | Edit 操作对已在 registry 中的标签无条件走验证管线——`edit()` 绕过了 `AIResponseValidator` 的 registry 匹配逻辑 | 审核方提出即认可，AI 分析路径和手动编辑路径的不对称性。用户补充 Regenerate 候选列表也应标注库内已有标签 | M5 `TagOperationExecutor.edit()` 增加 registry 检查步骤：`verified` → 🟢 跳过验证，`rejected` → 自动替换为目标标签（🟢），未命中 → 在线 `verifying` / 离线 `needs_review`。测试策略增加对应用例 | M5 |
+| 7 | Schema 同步的三存储（YAML/Registry/Staging）更新顺序未定义——部分崩溃将导致不可自愈的数据不一致 | 审核方提出 4 阶段持久化方案（`phase` 字段追踪每个阶段）。用户认为过度工程——Staging 和 Registry 都是单文件幂等写入（毫秒级），不值得单独追踪。改为只调整执行顺序，恢复时无条件重做前两步 | 执行顺序改为 Staging→Registry→YAML（从最安全到最危险）。恢复时 Staging 和 Registry 更新无条件重新执行（幂等），然后从 YAML `pending_files` 续传 | M6 |
+| 9 | ⚪ 验证中标签可能永久卡死——HealthChecker 认为 online 但实际请求失败时，标签停留在 ⚪ 状态，操作按钮永久禁用 | 审核方提出 `maxRetries`/`retryDelay` 方案。用户认为不需要重试——验证不是关键路径（🟡 也可操作），失败直接降级到 🟡 最简洁 | M4 VerificationPipeline 增加 ⚪ 终态保证：任何验证步骤的请求失败均视为该级未命中继续下一级，所有级别均失败标记 🟡，未预期异常 catch-all 标记 🟡。绝不允许标签永久停留在 ⚪ 状态。测试策略增加对应用例 | M4 |
+
+### 暂缓的 1 项
+
+| # | 问题 | 暂缓原因 |
+|---|------|---------|
+| 4 | `skip_tagged` + 部分 Apply 创造永久性"半成品笔记"——有 `_tagged_at` 但 staging 仍有未审核 type 的笔记被批量处理跳过 | 用户判断：①孤儿 staging 数据不导致丢失或损坏②打开笔记时侧边栏会自动展示待审核数据③需同时满足"多 type"+"批量处理"+"部分审核"三条件，是边缘中的边缘④VaultScanner 检查 staging 会增加 M7 对 M2 的新依赖。如需做，最轻量方案是 BatchProgressModal 中标注"staging 有残留"，不改 VaultScanner |
+
+### 驳回的 1 项
+
+| # | 问题 | 驳回原因 |
+|---|------|---------|
+| 8 | `RateLimiter` 无任何可配置参数（RPM/burst），Token Bucket 算法无法实现有效限速 | **第六轮已有明确决策**。第六轮撤回B："RateLimiter 按 provider 维度限速，同一 provider 用于 generation + verification 时实际频率翻倍"→用户判断不重要，429 错误被错误处理捕获即可。此外：`batch_concurrency`(1) + `max_batch_size`(50) 已是隐式限速；大多数用户不知道自己 API 的 RPM 限制，添加配置徒增困惑 |
+
+### 本轮审核模式特征
+
+1. **模块边界问题集中爆发**：9 个问题中 #1（applyAll type 范围）、#3（手动模式数据流）、#7（Schema 同步顺序）都发生在模块交接处——各模块内部描述清楚，但交接的"握手协议"缺失
+2. **接口契约填补**：#2（StagingStore 7 方法）填补了 RegistryStore 早在第四轮就建立的契约标准，StagingStore 作为被写入最多的 Store 却一直没有同等待遇
+3. **历史决策复用**：#8 被驳回是因为第六轮已有明确决策，审核需交叉验证历史记录避免重复讨论
+
+*文档版本：13.0 | 日期：2026-03-17*
+
+---
+
+## 第十轮架构审核修订（2026-03-18）
+
+> 第九轮修订引入的新矛盾 + 跨模块端到端追踪发现的死代码和重复数据问题。3 项修正，均经讨论确认。
+
+| # | 问题 | 讨论过程 | 最终修订 | 影响位置 |
+|---|------|---------|---------|---------|
+| 1 | 手动模式"仅新增标签进入 staging"与 `applyAll` 全量替换写入语义不可调和——staging 只有新标签，全量替换会丢失原有 YAML 标签 | 审核方指出矛盾后用户反馈："侧边栏始终拥有笔记的全部 YAML"。经讨论确认：手动模式下用户对某 type 添加第一个标签时，应将该 type 的现有 YAML 标签加载到 staging（与 AI 模式步骤 7 一致），保证 staging 始终是完整集合。第九轮写的"仅新增标签进入 staging"是错误的 | M6 手动模式改为：添加新标签时先初始化该 type 的 staging（从 YAML 加载现有标签，标记 accepted+ai_recommended:true），再追加新标签。M2 StagingStore 增加第 8 个方法 `addTagToFacet`。§2.8 同步更新。删除"只读展示"和"不触碰 YAML"的错误描述 | §2.8, M2, M6 |
+| 2 | `AIResponseValidator` 不使用 `TagMatcher` 做别名匹配——registry 中的 `aliases` 字段无消费者，AI 返回的别名形式被当作新词重复验证 | 端到端追踪分析流程 9 步发现 TagMatcher 从未被调用。AIResponseValidator 直接查 RegistryStore，但 `getTag("dl")` 无法命中 key 为 `"deep-learning"` 的条目。aliases 字段自第一版存在但从未有代码路径读取 | AIResponseValidator 步骤 3 改为调用 `TagMatcher.match()`（含 label/aliases/规范化三级匹配），命中则 label 替换为正式 label。M5 Edit 操作同步改用 TagMatcher。§2.8 手动键入同步更新 | M4, M5, §2.8 |
+| 3 | TagMerger staging 清理合并 A→B 时不检查去重——同一 facet 下同时有 A 和 B 时，替换后产生两个 B 条目，applyAll 写入重复值 | AI 可能同时建议同义词（如 `ML` 和 `machine-learning`），尤其在学术领域别名丰富时。合并后 staging 出现重复 label，applyAll 写入 `domain: [machine-learning, machine-learning]` | TagMerger staging 清理改为三种情况：A 存在无 B → 替换；A 和 B 同时存在 → 移除 A 保留 B；仅 B → 不操作 | M8 |
+
+### 本轮审核模式特征
+
+1. **第九轮引入的缺陷修复**：#1 是第九轮"轻量手动模式方案"引入的新矛盾——"仅新增标签进入 staging"看似减少了初始化开销，实际与 applyAll 全量替换语义不兼容。经用户指出"侧边栏始终拥有笔记全部 YAML"后纠正
+2. **死代码发现**：#2 的 TagMatcher 从第一版就存在，aliases 字段也一直在 registry 格式中，但九轮审核从未发现无消费者问题——因为历次审核聚焦于数据流和写入语义，未做"谁调用了谁"的引用追踪
+3. **组合边缘情况**：#3 需要同时满足"同义词共存于 staging"+"TagMerger 合并"两个条件，批量处理学术笔记时会遇到
+
+*文档版本：14.0 | 日期：2026-03-18*
