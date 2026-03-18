@@ -14,7 +14,11 @@
       "WebFetch(domain:help.obsidian.md)",
       "Bash(npm run:*)",
       "Bash(npm install:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(find /d/Vault-4/Projects/The-Only-One-Tagger/src -type f -name *.ts)",
+      "Bash(wc:*)",
+      "Bash(find D:Vault-4ProjectsThe-Only-One-Taggersrcui -type f -name *.ts)",
+      "Bash(xargs grep:*)"
     ]
   }
 }
