@@ -81,7 +81,8 @@ export class VerificationPipeline {
       }
 
       // Level 2: Search API + AI 判定
-      if (this.deps.searchChecker.getStatus() === 'not_configured') {
+      const searchStatus = this.deps.searchChecker.getStatus();
+      if (searchStatus === 'not_configured' || searchStatus === 'offline') {
         badge = 'needs_review';
       } else {
         try {

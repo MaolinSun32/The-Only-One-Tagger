@@ -1,35 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import type { App, TFile } from 'obsidian';
-import type { Schema } from '../../src/types';
-import { SchemaResolver } from '../../src/engine/schema-resolver';
 import { FrontmatterService } from '../../src/engine/frontmatter-service';
 
 const mockFile = { path: 'test/note.md', basename: 'note' } as TFile;
-
-const TEST_SCHEMA: Schema = {
-  version: 1,
-  note_types: {
-    academic: {
-      label: '学术研究', description: 'Academic',
-      required_facets: ['domain', 'genre'],
-      optional_facets: ['method', 'scholar'],
-    },
-    project: {
-      label: '项目', description: 'Project',
-      required_facets: ['domain', 'status'],
-      optional_facets: [],
-    },
-  },
-  facet_definitions: {
-    domain: { description: '领域', value_type: 'taxonomy', allow_multiple: true, verification_required: true },
-    method: { description: '方法', value_type: 'taxonomy', allow_multiple: true, verification_required: true },
-    genre: { description: '体裁', value_type: 'enum', allow_multiple: false, verification_required: false, values: ['paper'] },
-    status: { description: '状态', value_type: 'enum', allow_multiple: false, verification_required: false, values: ['in-progress'] },
-    scholar: { description: '学者', value_type: 'wikilink', allow_multiple: true, verification_required: false },
-  },
-};
-
-const schemaResolver = new SchemaResolver(TEST_SCHEMA);
 
 // Helper: create mock App with controllable frontmatter cache and processFrontMatter
 function createMockApp(
@@ -61,7 +34,7 @@ describe('FrontmatterService', () => {
   describe('read()', () => {
     it('returns empty structure for no frontmatter', async () => {
       const { app } = createMockApp(undefined);
-      const service = new FrontmatterService(app, schemaResolver);
+      const service = new FrontmatterService(app);
       const result = await service.read(mockFile);
 
       expect(result.types).toEqual([]);
@@ -77,7 +50,7 @@ describe('FrontmatterService', () => {
         _tag_version: 1,
         _tagged_at: '2026-03-11',
       });
-      const service = new FrontmatterService(app, schemaResolver);
+      const service = new FrontmatterService(app);
       const result = await service.read(mockFile);
 
       expect(result.types).toEqual(['academic']);
@@ -93,7 +66,7 @@ describe('FrontmatterService', () => {
         type: 'academic',
         academic: { domain: ['nlp'] },
       });
-      const service = new FrontmatterService(app, schemaResolver);
+      const service = new FrontmatterService(app);
       const result = await service.read(mockFile);
 
       expect(result.types).toEqual(['academic']);
@@ -101,7 +74,7 @@ describe('FrontmatterService', () => {
 
     it('handles missing type field', async () => {
       const { app } = createMockApp({ _tag_version: 2 });
-      const service = new FrontmatterService(app, schemaResolver);
+      const service = new FrontmatterService(app);
       const result = await service.read(mockFile);
 
       expect(result.types).toEqual([]);
@@ -113,7 +86,7 @@ describe('FrontmatterService', () => {
         type: ['academic'],
         academic: { scholar: ['[[Vaswani-A]]', '[[Shazeer-N]]'] },
       });
-      const service = new FrontmatterService(app, schemaResolver);
+      const service = new FrontmatterService(app);
       const result = await service.read(mockFile);
 
       expect(result.typeData['academic']['scholar']).toEqual(['[[Vaswani-A]]', '[[Shazeer-N]]']);
@@ -123,7 +96,7 @@ describe('FrontmatterService', () => {
   describe('write()', () => {
     it('writes single type with facets', async () => {
       const { app, lastFrontmatter } = createMockApp({});
-      const service = new FrontmatterService(app, schemaResolver);
+      const service = new FrontmatterService(app);
 
       await service.write(mockFile, {
         types: ['academic'],
@@ -144,7 +117,7 @@ describe('FrontmatterService', () => {
         type: ['academic'],
         academic: { domain: ['nlp'] },
       });
-      const service = new FrontmatterService(app, schemaResolver);
+      const service = new FrontmatterService(app);
 
       await service.write(mockFile, {
         types: ['academic', 'project'],
@@ -162,7 +135,7 @@ describe('FrontmatterService', () => {
         type: ['academic'],
         academic: { domain: ['nlp', 'ml'], genre: 'paper' },
       });
-      const service = new FrontmatterService(app, schemaResolver);
+      const service = new FrontmatterService(app);
 
       await service.write(mockFile, {
         types: ['academic'],
@@ -182,7 +155,7 @@ describe('FrontmatterService', () => {
         academic: { domain: ['nlp'] },
         project: { domain: ['web'], status: 'in-progress' },
       });
-      const service = new FrontmatterService(app, schemaResolver);
+      const service = new FrontmatterService(app);
 
       // Only update academic
       await service.write(mockFile, {
@@ -201,7 +174,7 @@ describe('FrontmatterService', () => {
       const { app, lastFrontmatter } = createMockApp({
         _tag_version: 3,
       });
-      const service = new FrontmatterService(app, schemaResolver);
+      const service = new FrontmatterService(app);
 
       await service.write(mockFile, { types: ['academic'], typeData: { academic: {} } });
       expect(lastFrontmatter()._tag_version).toBe(4);
@@ -209,7 +182,7 @@ describe('FrontmatterService', () => {
 
     it('starts _tag_version at 1 when missing', async () => {
       const { app, lastFrontmatter } = createMockApp({});
-      const service = new FrontmatterService(app, schemaResolver);
+      const service = new FrontmatterService(app);
 
       await service.write(mockFile, { types: ['academic'], typeData: { academic: {} } });
       expect(lastFrontmatter()._tag_version).toBe(1);
@@ -225,7 +198,7 @@ describe('FrontmatterService', () => {
         _tag_version: 2,
         _tagged_at: '2026-03-11',
       });
-      const service = new FrontmatterService(app, schemaResolver);
+      const service = new FrontmatterService(app);
 
       await service.removeTypeBlock(mockFile, 'academic');
 
@@ -243,7 +216,7 @@ describe('FrontmatterService', () => {
         type: ['academic'],
         academic: { domain: ['nlp'] },
       });
-      const service = new FrontmatterService(app, schemaResolver);
+      const service = new FrontmatterService(app);
 
       await service.removeTypeBlock(mockFile, 'academic');
 

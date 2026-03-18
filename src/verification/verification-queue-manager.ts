@@ -1,4 +1,4 @@
-import type { BadgeType, StagingTagItem } from '../types';
+import type { BadgeType, StagingTagItem, VerificationQueueItem } from '../types';
 import type { QueueStore } from '../storage/queue-store';
 import type { VerificationPipeline } from './verification-pipeline';
 import type { StagingStore } from '../storage/staging-store';
@@ -71,60 +71,100 @@ export class VerificationQueueManager {
     }
   }
 
-  /** 手动触发队列处理 */
+  /**
+   * 手动触发队列处理。
+   *
+   * Bug 1 fix: 全部逻辑在单次 update() 中完成，避免 load()/save() 覆盖竞争。
+   * 先快照待处理列表，执行验证（async），最后在同步 update() 中统一修改队列。
+   */
   async processQueue(): Promise<void> {
-    const data = await this.deps.queueStore.load();
-    const toRemove: string[] = [];
+    // 快照当前队列（只读用途）
+    const snapshot = await this.deps.queueStore.load();
+    const items = [...snapshot.queue];
 
-    for (const item of data.queue) {
-      item.attempts++;
+    // 收集处理结果（在 update 外完成 async 工作）
+    const results: Array<{
+      tag_label: string;
+      success: boolean;
+      badge: BadgeType;
+      remove: boolean;
+      newAttempts: number;
+    }> = [];
+
+    for (const item of items) {
+      const newAttempts = item.attempts + 1;
 
       try {
-        // 使用 VerificationPipeline 验证
-        // 取第一个 source_note 作为上下文（队列验证不绑定特定笔记）
         await this.deps.verificationPipeline.verifyTags([{
           label: item.tag_label,
           facet: item.facet,
           notePath: item.source_notes[0] ?? '',
-          type: '', // 队列重试不需要 type（已在 staging 中）
+          type: '',
         }]);
 
-        // 广播更新 staging 中所有包含该标签的条目
-        await this.broadcastResult(item.tag_label, true);
-        toRemove.push(item.tag_label);
+        results.push({
+          tag_label: item.tag_label,
+          success: true,
+          badge: 'search_verified', // pipeline 内部已确定实际 badge
+          remove: true,
+          newAttempts,
+        });
       } catch (e) {
         console.warn(`[TOOT] Queue verification failed for "${item.tag_label}"`, e);
 
-        if (item.attempts >= MAX_ATTEMPTS) {
-          // 超过重试上限 → 标为 needs_review 并移除
-          await this.broadcastResult(item.tag_label, false);
-          toRemove.push(item.tag_label);
-        }
-        // 未超过上限 → 保留在队列中，下次重试
+        results.push({
+          tag_label: item.tag_label,
+          success: false,
+          badge: 'needs_review',
+          remove: newAttempts >= MAX_ATTEMPTS,
+          newAttempts,
+        });
       }
     }
 
-    // 批量移除已处理的条目
-    if (toRemove.length > 0) {
-      await this.deps.queueStore.update(d => {
-        d.queue = d.queue.filter(q => !toRemove.includes(q.tag_label));
+    // 广播更新 staging（async，在 update 之外完成）
+    for (const r of results) {
+      await this.broadcastResult(r.tag_label, r.success, r.badge);
+    }
+
+    // 同步 update：原子性地更新 attempts + 移除已完成条目
+    const toRemoveSet = new Set(results.filter(r => r.remove).map(r => r.tag_label));
+    const attemptsMap = new Map(results.map(r => [r.tag_label, r.newAttempts]));
+
+    if (results.length > 0) {
+      await this.deps.queueStore.update(data => {
+        // 更新 attempts
+        for (const item of data.queue) {
+          const newAttempts = attemptsMap.get(item.tag_label);
+          if (newAttempts !== undefined) {
+            item.attempts = newAttempts;
+          }
+        }
+        // 移除已完成条目
+        data.queue = data.queue.filter(q => !toRemoveSet.has(q.tag_label));
       });
     }
-
-    // 保存 attempts 更新
-    await this.deps.queueStore.save(data);
   }
 
-  /** 清理已入 registry 的条目（applyAll 后调用） */
+  /**
+   * 清理已入 registry 的条目（applyAll 后调用）。
+   *
+   * Bug 2 fix: 不传 async mutator 给 update()。
+   * 先 load() + async 循环过滤，再用同步 update() 写入结果。
+   */
   async cleanupRegistered(): Promise<void> {
-    await this.deps.queueStore.update(async data => {
-      const kept = [];
-      for (const item of data.queue) {
-        const tag = await this.deps.registryStore.getTag(item.tag_label);
-        if (tag && tag.status === 'verified') continue; // 已在 registry，移除
-        kept.push(item);
-      }
-      data.queue = kept;
+    const data = await this.deps.queueStore.load();
+    const toKeep: string[] = [];
+
+    for (const item of data.queue) {
+      const tag = await this.deps.registryStore.getTag(item.tag_label);
+      if (tag && tag.status === 'verified') continue; // 已在 registry，移除
+      toKeep.push(item.tag_label);
+    }
+
+    const keepSet = new Set(toKeep);
+    await this.deps.queueStore.update(d => {
+      d.queue = d.queue.filter(q => keepSet.has(q.tag_label));
     });
   }
 
@@ -137,30 +177,36 @@ export class VerificationQueueManager {
 
   /**
    * 广播更新 staging 中所有包含该标签的条目。
-   * verified=true → 由 VerificationPipeline 已更新了具体 badge
-   * verified=false → 标为 needs_review
+   *
+   * Bug 3 fix: 成功路径也调用 findAndUpdateTagGlobally，
+   * 将其他笔记中 badge 为 verifying 的条目更新为实际验证结果 badge。
    */
-  private async broadcastResult(tagLabel: string, verified: boolean): Promise<void> {
-    if (!verified) {
-      // 验证失败：更新所有 staging 中 badge 为 verifying 的条目
-      await this.deps.stagingStore.findAndUpdateTagGlobally(
-        tagLabel,
-        (entry: StagingTagItem): StagingTagItem => {
-          if (entry.badge === 'verifying') {
-            return { ...entry, badge: 'needs_review' as BadgeType };
-          }
-          return entry;
-        },
-      );
+  private async broadcastResult(
+    tagLabel: string,
+    verified: boolean,
+    badge: BadgeType,
+  ): Promise<void> {
+    // 无论成功或失败，都广播更新所有 staging 中 badge 为 verifying 的条目
+    const targetBadge: BadgeType = verified ? badge : 'needs_review';
+    await this.deps.stagingStore.findAndUpdateTagGlobally(
+      tagLabel,
+      (entry: StagingTagItem): StagingTagItem => {
+        if (entry.badge === 'verifying') {
+          return { ...entry, badge: targetBadge };
+        }
+        return entry;
+      },
+    );
 
-      // 检查是否已在 registry 中（之前 applyAll 过）→ flag
-      const regTag = await this.deps.registryStore.getTag(tagLabel);
+    // Registry flagging/unflagging
+    const regTag = await this.deps.registryStore.getTag(tagLabel);
+    if (!verified) {
+      // 验证失败：检查是否已在 registry 中（之前 applyAll 过）→ flag
       if (regTag && regTag.status === 'verified') {
         await this.deps.registryStore.flagTag(tagLabel);
       }
     } else {
       // 验证成功：检查是否 flagged → unflag
-      const regTag = await this.deps.registryStore.getTag(tagLabel);
       if (regTag && regTag.flagged) {
         await this.deps.registryStore.unflagTag(tagLabel);
       }

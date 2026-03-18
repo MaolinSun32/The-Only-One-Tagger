@@ -1,16 +1,16 @@
 import type { App, TFile } from 'obsidian';
 import type { TaggedNote, TagWriteData } from '../types';
-import type { SchemaResolver } from './schema-resolver';
 
 /**
  * Structured YAML frontmatter read/write via Obsidian's processFrontMatter API.
  * Never directly manipulates YAML strings — always goes through the official API.
+ *
+ * Caller is responsible for providing correctly-formatted values in TagWriteData:
+ * - allow_multiple: true  → string[]
+ * - allow_multiple: false → string
  */
 export class FrontmatterService {
-  constructor(
-    private app: App,
-    private schemaResolver: SchemaResolver,
-  ) {}
+  constructor(private app: App) {}
 
   /**
    * Read current YAML frontmatter into a structured TaggedNote.
