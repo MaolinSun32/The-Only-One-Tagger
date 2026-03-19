@@ -25,7 +25,11 @@ export class BraveSearchAdapter {
 
   async search(query: string): Promise<SearchResult[]> {
     const encoded = encodeURIComponent(query);
-    const url = `${this.baseUrl}/res/v1/web/search?q=${encoded}&count=5`;
+    // baseUrl 可能是完整路径或仅域名，统一处理
+    const base = this.baseUrl.includes('/res/v1/web/search')
+      ? this.baseUrl
+      : `${this.baseUrl}/res/v1/web/search`;
+    const url = `${base}?q=${encoded}&count=5`;
 
     const data = await this.httpClient.get<BraveSearchResponse>(url, {
       'Accept': 'application/json',

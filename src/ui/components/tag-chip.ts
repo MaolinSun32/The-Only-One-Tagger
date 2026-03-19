@@ -232,15 +232,20 @@ export class TagChip {
       this.setupWikilinkAutocomplete(input);
     }
 
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const newVal = input.value.trim();
-        if (newVal && newVal !== this.item.label) {
-          this.callbacks.onEdit(this.item.label, newVal);
-        }
+    let committed = false;
+    const commitEdit = () => {
+      if (committed) return;
+      committed = true;
+      const newVal = input.value.trim();
+      if (newVal && newVal !== this.item.label) {
+        this.callbacks.onEdit(this.item.label, newVal);
       }
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
     });
+    input.addEventListener('blur', () => setTimeout(commitEdit, 200));
 
     this.buildAcceptDeleteButtons();
   }
@@ -297,15 +302,20 @@ export class TagChip {
       attr: { type: 'text', value: this.item.label },
     });
 
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const newVal = input.value.trim();
-        if (newVal && newVal !== this.item.label) {
-          this.callbacks.onEdit(this.item.label, newVal);
-        }
+    let committed = false;
+    const commitEdit = () => {
+      if (committed) return;
+      committed = true;
+      const newVal = input.value.trim();
+      if (newVal && newVal !== this.item.label) {
+        this.callbacks.onEdit(this.item.label, newVal);
       }
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
     });
+    input.addEventListener('blur', () => setTimeout(commitEdit, 200));
 
     this.buildAcceptDeleteButtons();
   }

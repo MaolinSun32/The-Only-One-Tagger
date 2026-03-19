@@ -104,7 +104,10 @@ export class FacetSection {
     });
     input.focus();
 
+    let committed = false;
     const commit = () => {
+      if (committed) return;
+      committed = true;
       const val = input.value.trim();
       if (val) {
         this.callbacks.onAddTag(this.facetName, val);
@@ -114,9 +117,9 @@ export class FacetSection {
 
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); commit(); }
-      if (e.key === 'Escape') { e.preventDefault(); container.remove(); }
+      if (e.key === 'Escape') { e.preventDefault(); committed = true; container.remove(); }
     });
-    input.addEventListener('blur', () => setTimeout(() => container.remove(), 200));
+    input.addEventListener('blur', () => setTimeout(commit, 200));
 
     // Wikilink autocomplete
     if (this.facetDef.value_type === 'wikilink' && this.app) {

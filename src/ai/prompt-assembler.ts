@@ -80,10 +80,11 @@ export class PromptAssembler {
         role: 'system',
         content:
           '你是一位专业的图书馆分类员和知识管理专家。\n' +
-          '为以下笔记标注标签。对每个 facet，严格审查已有标签，确保标签完整覆盖内容。\n' +
-          '保留准确的，移除不准确的，补充遗漏的。\n' +
-          '返回你认为该笔记应拥有的完整标签集合。\n' +
-          '以 JSON 格式返回：{ "facet_name": ["tag1", "tag2"], ... }\n\n' +
+          '为以下笔记标注标签。严格依据笔记正文和图片中**实际出现**的内容进行标注。\n' +
+          '只标注笔记中明确提到、展示或直接涉及的概念，不要推测或补充笔记未提及的相关概念。\n' +
+          '对已有标签：保留笔记中有依据的，移除笔记中找不到依据的。\n' +
+          '以 JSON 格式返回：{ "facet_name": ["tag1", "tag2"], ... }\n' +
+          '如果某个 facet 在笔记中完全没有相关内容，不要返回该 facet。\n\n' +
           `当前笔记类型：${type}（${schema.label} — ${schema.description}）\n\n` +
           '=== Facet 定义 ===\n' + facetSection +
           existingSection,

@@ -1,7 +1,7 @@
 import { Notice } from 'obsidian';
 import type { TFile } from 'obsidian';
 import type TheOnlyOneTagger from '../main';
-import type { StagingNote, StagingTagItem, BadgeType } from '../types';
+import type { StagingNote, StagingTagItem, BadgeType, FacetDefinition } from '../types';
 import { NetworkIndicator } from './components/network-indicator';
 import { FacetSection, type FacetSectionCallbacks } from './components/facet-section';
 import { TypeSelector } from './components/type-selector';
@@ -252,7 +252,19 @@ export class AIModeRenderer {
         await this.plugin.tagOperationExecutor.toggleDelete(this.notePath, typeName, facet, tag);
       },
       onEditTag: async (facet, oldTag, newTag) => {
-        await this.plugin.tagOperationExecutor.edit(this.notePath, typeName, facet, oldTag, newTag);
+        // 非 taxonomy 标签直接替换，不走 normalize
+        const facetDef = this.getFacetDef(typeName, facet);
+        if (facetDef && facetDef.value_type !== 'taxonomy') {
+          const badge = facetDef.value_type.replace('-', '_') as BadgeType;
+          await this.plugin.stagingStore.replaceTag(this.notePath, typeName, facet, oldTag, {
+            label: newTag,
+            badge,
+            user_status: 'accepted',
+            ai_recommended: true,
+          });
+        } else {
+          await this.plugin.tagOperationExecutor.edit(this.notePath, typeName, facet, oldTag, newTag);
+        }
       },
       onRegenerateTag: async (facet, tag) => {
         const content = await this.plugin.app.vault.read(this.file);
@@ -320,6 +332,14 @@ export class AIModeRenderer {
         await this.plugin.stagingStore.addTagToFacet(this.notePath, typeName, facet, newEntry);
       },
     };
+  }
+
+  private getFacetDef(typeName: string, facetName: string): FacetDefinition | null {
+    try {
+      const resolved = this.plugin.schemaResolver.resolve(typeName);
+      const allFacets = { ...resolved.requiredFacets, ...resolved.optionalFacets };
+      return allFacets[facetName] ?? null;
+    } catch { return null; }
   }
 
   destroy(): void {

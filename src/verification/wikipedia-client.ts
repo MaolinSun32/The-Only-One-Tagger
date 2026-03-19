@@ -29,7 +29,9 @@ export class WikipediaClient {
 
   async lookup(label: string): Promise<VerificationResult> {
     try {
-      const encoded = encodeURIComponent(label);
+      // 标签格式为 lowercase-hyphenated，Wikipedia 标题使用空格
+      const searchTerm = label.replace(/-/g, ' ');
+      const encoded = encodeURIComponent(searchTerm);
       const url =
         `https://${this.lang}.wikipedia.org/w/api.php` +
         `?action=query&titles=${encoded}&format=json&redirects=1&prop=pageprops`;
