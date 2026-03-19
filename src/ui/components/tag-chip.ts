@@ -7,7 +7,7 @@ export interface TagChipCallbacks {
   onDelete: (tagLabel: string) => Promise<void>;
   onEdit: (oldTag: string, newTag: string) => Promise<void>;
   onRegenerate: (tag: string) => Promise<string[]>;
-  onConfirmRegenerate: (oldTag: string, selectedCandidate: string) => Promise<void>;
+  onConfirmRegenerate: (oldTag: string, selectedCandidate: string, allCandidates: string[]) => Promise<void>;
 }
 
 /**
@@ -175,7 +175,8 @@ export class TagChip {
     this.candidateList = new CandidateList(
       anchorEl,
       (candidate) => {
-        this.callbacks.onConfirmRegenerate(this.item.label, candidate);
+        const all = this.candidateList?.getAllCandidates() ?? [];
+        this.callbacks.onConfirmRegenerate(this.item.label, candidate, all);
         this.candidateList = null;
       },
       () => { this.candidateList = null; },

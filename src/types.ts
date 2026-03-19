@@ -173,6 +173,7 @@ export interface BatchState {
   task_id: string;
   started_at: string;
   status: BatchStatus;
+  total_files: number;
   filter: BatchFilter;
   processed_files: string[];
   failed_files: Record<string, string>;

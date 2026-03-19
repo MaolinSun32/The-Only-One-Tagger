@@ -215,12 +215,19 @@ export class TagReviewView extends ItemView {
   /**
    * 检查笔记是否在批量处理队列中（未处理）。
    * 使用缓存的 batch state，避免每次切换笔记都磁盘读取。
+   * 仅当笔记路径匹配 batch filter 的 folder 范围时才算"在队列中"。
    */
   private isInBatchQueue(notePath: string): boolean {
     if (!this.cachedBatchState) return false;
     if (this.cachedBatchState.status !== 'running') return false;
-    // In queue = batch is running AND file not yet processed
-    return !this.cachedBatchState.processed_files.includes(notePath);
+    // 已处理过的不在队列中
+    if (this.cachedBatchState.processed_files.includes(notePath)) return false;
+    // 已失败的也不算等待中
+    if (this.cachedBatchState.failed_files[notePath]) return false;
+    // 检查笔记是否在 batch filter 的 folder 范围内
+    const folders = this.cachedBatchState.filter.folders;
+    if (folders.length === 0) return true; // 空 = 全库扫描
+    return folders.some(folder => notePath.startsWith(folder));
   }
 
   destroy(): void {

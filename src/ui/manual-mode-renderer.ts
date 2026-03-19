@@ -230,8 +230,8 @@ export class ManualModeRenderer {
         const content = await this.plugin.app.vault.read(this.file);
         return this.plugin.tagOperationExecutor.regenerate(this.notePath, typeName, facet, tag, content);
       },
-      onConfirmRegenerate: async (facet, oldTag, candidate) => {
-        await this.plugin.tagOperationExecutor.confirmRegenerate(this.notePath, typeName, facet, oldTag, candidate);
+      onConfirmRegenerate: async (facet, oldTag, candidate, allCandidates) => {
+        await this.plugin.tagOperationExecutor.confirmRegenerate(this.notePath, typeName, facet, oldTag, candidate, allCandidates);
       },
       onAddTag: async (facet, value) => {
         // §8.2: 确保 staging 已初始化
@@ -263,7 +263,22 @@ export class ManualModeRenderer {
             badge = 'registry';
           } else {
             finalLabel = normalized;
-            badge = 'needs_review';
+            const isOnline = this.plugin.networkAggregator.isFullyOnline();
+            badge = isOnline ? 'verifying' : 'needs_review';
+
+            // 触发验证
+            if (isOnline) {
+              this.plugin.verificationPipeline
+                .verifyTags([{ label: finalLabel, facet, notePath: this.notePath, type: typeName }])
+                .catch(e => console.error('[TOOT] Add tag verification failed', e));
+            } else {
+              await this.plugin.verificationQueueManager.enqueue({
+                tag_label: finalLabel,
+                facet,
+                suggested_by: 'user',
+                source_note: this.notePath,
+              });
+            }
           }
         } else {
           badge = facetDef.value_type.replace('-', '_') as BadgeType;

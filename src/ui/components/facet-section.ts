@@ -7,7 +7,7 @@ export interface FacetSectionCallbacks {
   onDeleteTag: (facet: string, tagLabel: string) => Promise<void>;
   onEditTag: (facet: string, oldTag: string, newTag: string) => Promise<void>;
   onRegenerateTag: (facet: string, tag: string) => Promise<string[]>;
-  onConfirmRegenerate: (facet: string, oldTag: string, selectedCandidate: string) => Promise<void>;
+  onConfirmRegenerate: (facet: string, oldTag: string, selectedCandidate: string, allCandidates: string[]) => Promise<void>;
   onAddTag: (facet: string, value: string) => Promise<void>;
 }
 
@@ -71,7 +71,7 @@ export class FacetSection {
         onDelete: (tag) => this.callbacks.onDeleteTag(this.facetName, tag),
         onEdit: (old, nw) => this.callbacks.onEditTag(this.facetName, old, nw),
         onRegenerate: (tag) => this.callbacks.onRegenerateTag(this.facetName, tag),
-        onConfirmRegenerate: (old, sel) => this.callbacks.onConfirmRegenerate(this.facetName, old, sel),
+        onConfirmRegenerate: (old, sel, all) => this.callbacks.onConfirmRegenerate(this.facetName, old, sel, all),
       };
       this.chips.push(new TagChip(this.tagsEl, item, this.facetDef, chipCallbacks, this.app));
     }

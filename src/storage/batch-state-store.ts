@@ -7,6 +7,7 @@ const DEFAULT_BATCH_STATE: BatchState = {
   task_id: '',
   started_at: '',
   status: 'completed',
+  total_files: 0,
   filter: { folders: [], skip_tagged: true },
   processed_files: [],
   failed_files: {},

@@ -2,6 +2,7 @@ import { Notice, TFile } from 'obsidian';
 import type { AnalysisOrchestrator } from '../operations/analysis-orchestrator';
 import type { RateLimiter } from '../ai/rate-limiter';
 import type { BatchStateManager } from './batch-state-manager';
+import type { VaultScanner } from './vault-scanner';
 import type { OperationLock } from '../operation-lock';
 import type { TootSettings, ScanFilter, BatchProgressEvent } from '../types';
 
@@ -47,6 +48,7 @@ type BatchProcessorEvent = 'progress' | 'noteCompleted';
 export class BatchProcessor {
   private _state: 'idle' | 'running' | 'paused' = 'idle';
   private readonly listeners = new Map<BatchProcessorEvent, Function[]>();
+  private vaultScanner: VaultScanner | null = null;
 
   constructor(
     private orchestrator: AnalysisOrchestrator,
@@ -55,6 +57,11 @@ export class BatchProcessor {
     private operationLock: OperationLock,
     private settings: TootSettings,
   ) {}
+
+  /** 注入 VaultScanner（避免循环依赖，在 main.ts 中注入） */
+  setVaultScanner(scanner: VaultScanner): void {
+    this.vaultScanner = scanner;
+  }
 
   /**
    * 启动批量处理。
@@ -77,9 +84,9 @@ export class BatchProcessor {
     const batch = files.slice(0, maxSize);
     const reachedLimit = files.length > maxSize;
 
-    // 初始化状态
+    // 初始化状态（记录 total_files 供 Modal 使用）
     const taskId = `batch_${Date.now()}`;
-    await this.stateManager.init(taskId, filter);
+    await this.stateManager.init(taskId, filter, batch.length);
 
     await this.processBatch(batch, reachedLimit);
   }
@@ -91,29 +98,19 @@ export class BatchProcessor {
     }
   }
 
-  /** 恢复已暂停的批次 */
-  async resume(): Promise<void> {
-    if (this._state !== 'paused') return;
-
-    // 重新获取锁
-    if (!this.operationLock.acquire('批量打标')) {
-      new Notice(`当前有操作正在执行：${this.operationLock.getCurrentOp()}`);
-      return;
-    }
-
-    this._state = 'running';
-    await this.stateManager.setStatus('running');
-
-    // 从 stateManager 获取剩余文件 — 需要 VaultScanner
-    // resume 由外层（main.ts 或 BatchProgressModal）负责调用 getRecoveryFiles 后传入
-    // 这里简化：由调用方传入剩余文件
-  }
-
   /**
-   * 恢复已暂停的批次（带文件列表）。
-   * 由外层获取 recovery files 后调用。
+   * 恢复已暂停的批次。
+   * 自包含：内部调用 stateManager.getRecoveryFiles() 获取剩余文件并继续处理。
    */
-  async resumeWithFiles(files: TFile[]): Promise<void> {
+  async resume(): Promise<void> {
+    if (this._state !== 'paused' && this._state !== 'idle') return;
+
+    if (!this.vaultScanner) {
+      console.error('[TOOT] BatchProcessor.resume: VaultScanner not injected');
+      return;
+    }
+
+    // 获取锁
     if (!this.operationLock.acquire('批量打标')) {
       new Notice(`当前有操作正在执行：${this.operationLock.getCurrentOp()}`);
       return;
@@ -121,7 +118,19 @@ export class BatchProcessor {
 
     this._state = 'running';
     await this.stateManager.setStatus('running');
-    await this.processBatch(files, false);
+
+    // 获取剩余文件
+    const recoveryFiles = await this.stateManager.getRecoveryFiles(this.vaultScanner);
+
+    if (recoveryFiles.length === 0) {
+      await this.stateManager.setStatus('completed');
+      this._state = 'idle';
+      this.operationLock.release();
+      new Notice('没有需要恢复处理的笔记');
+      return;
+    }
+
+    await this.processBatch(recoveryFiles, false);
   }
 
   /** 终止批次（等待正在处理的文件完成后终止） */
@@ -161,7 +170,8 @@ export class BatchProcessor {
 
   /**
    * 核心处理循环。
-   * 使用 Semaphore 控制并发度，RateLimiter 控制 API 调用频率。
+   * 使用 Promise.all + Semaphore 实现真正的并发控制。
+   * RateLimiter 在 semaphore 之后（获得并发槽位后才去消耗 API 令牌）。
    * 每个文件的 analyzeNote() 在 try-catch 中执行，失败不中断批次。
    */
   private async processBatch(files: TFile[], reachedLimit: boolean): Promise<void> {
@@ -172,14 +182,18 @@ export class BatchProcessor {
     const baseUrl = this.settings.generation_base_url;
 
     const processFile = async (file: TFile): Promise<void> => {
-      await this.rateLimiter.acquire(baseUrl);
+      // 获取并发槽位
       await semaphore.acquire();
 
       try {
-        // 检查是否被暂停或终止
+        // 获得槽位后检查是否被暂停或终止
         if (this._state !== 'running') return;
 
+        // 获得槽位后再消耗 API 令牌（避免 rate limiter 占用无法释放的令牌）
+        await this.rateLimiter.acquire(baseUrl);
+
         await this.orchestrator.analyzeNote(file);
+        processed++;
         await this.stateManager.recordSuccess(file.path);
         this.emit('noteCompleted', file.path);
       } catch (e: any) {
@@ -191,34 +205,32 @@ export class BatchProcessor {
         semaphore.release();
       }
 
-      processed++;
       this.emit('progress', {
-        processed,
+        processed: processed + failedCount,
         total,
         current_file: file.path,
         failed_count: failedCount,
       } as BatchProgressEvent);
     };
 
-    // 逐文件处理（并发由 semaphore 控制）
-    for (const file of files) {
-      // 检查暂停/终止标志
-      if (this._state === 'paused') {
-        await this.stateManager.setStatus('paused');
-        this.operationLock.release();
-        new Notice('批量打标已暂停');
-        return;
-      }
+    // 真正并发：所有文件同时启动，由 semaphore 控制实际并发数
+    const promises = files.map(f => processFile(f));
+    await Promise.all(promises);
 
-      if (this._state === 'idle') {
-        // 终止
-        await this.stateManager.setStatus('terminated');
-        this.operationLock.release();
-        new Notice('批量打标已终止');
-        return;
-      }
+    // 检查最终状态（pause/terminate 可能在并发中被触发）
+    if (this._state === 'paused') {
+      await this.stateManager.setStatus('paused');
+      this.operationLock.release();
+      new Notice('批量打标已暂停');
+      return;
+    }
 
-      await processFile(file);
+    if (this._state === 'idle') {
+      // 终止
+      await this.stateManager.setStatus('terminated');
+      this.operationLock.release();
+      new Notice('批量打标已终止');
+      return;
     }
 
     // 全部完成

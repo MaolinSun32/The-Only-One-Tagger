@@ -14,11 +14,12 @@ export class BatchStateManager {
   constructor(private store: BatchStateStore) {}
 
   /** 初始化新的批量任务 */
-  async init(taskId: string, filter: ScanFilter): Promise<void> {
+  async init(taskId: string, filter: ScanFilter, totalFiles: number): Promise<void> {
     const state: BatchState = {
       task_id: taskId,
       started_at: new Date().toISOString(),
       status: 'running',
+      total_files: totalFiles,
       filter: {
         folders: filter.folders,
         skip_tagged: filter.skip_tagged,

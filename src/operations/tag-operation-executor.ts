@@ -88,15 +88,20 @@ export class TagOperationExecutor {
     await this.replaceWithNewTag(notePath, type, facet, oldTag, newTag);
   }
 
-  /** 选择 regenerate 候选后确认替换（逻辑同 edit，仅语义区分） */
+  /**
+   * 选择 regenerate 候选后确认替换。
+   * 未选中的候选 + 原始标签全部记入 replaces 链（黑名单语义）。
+   */
   async confirmRegenerate(
     notePath: string,
     type: string,
     facet: string,
     oldTag: string,
     selectedCandidate: string,
+    allCandidates: string[],
   ): Promise<void> {
-    await this.replaceWithNewTag(notePath, type, facet, oldTag, selectedCandidate);
+    const unselected = allCandidates.filter(c => c !== selectedCandidate);
+    await this.replaceWithNewTag(notePath, type, facet, oldTag, selectedCandidate, unselected);
   }
 
   /**
@@ -109,6 +114,7 @@ export class TagOperationExecutor {
     facet: string,
     oldTag: string,
     newTag: string,
+    extraReplaces: string[] = [],
   ): Promise<void> {
     // 1. 正规化
     const normalizedNew = TagNormalizer.normalize(newTag);
@@ -135,10 +141,10 @@ export class TagOperationExecutor {
       needsVerification = true;
     }
 
-    // 4. 构建 replaces 链
+    // 4. 构建 replaces 链（含原始标签 + 未选中候选）
     const staging = await this.deps.stagingStore.getNoteStaging(notePath);
     const oldEntry = staging?.types[type]?.[facet]?.find(i => i.label === oldTag);
-    const replaces = [...(oldEntry?.replaces ?? []), oldTag];
+    const replaces = [...(oldEntry?.replaces ?? []), oldTag, ...extraReplaces];
 
     // 5. 构建新条目
     const newEntry: StagingTagItem = {

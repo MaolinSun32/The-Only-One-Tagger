@@ -241,19 +241,34 @@ export class SchemaEditorRenderer {
         `删除 Type "${typeName}"`,
         affected,
         async () => {
-          // Sync: update staging + registry, then schema
-          // YAML sync via BulkYamlModifier (stub)
-          await this.plugin.schemaStore.update(data => {
-            delete data.note_types[typeName];
-          });
-          await this.reloadResolver();
+          const lockOk = this.plugin.operationLock.acquire('Schema 同步 - 删除 Type');
+          if (!lockOk) {
+            new Notice(`当前有 ${this.plugin.operationLock.getCurrentOp()} 正在执行，请等待完成`);
+            return;
+          }
           try {
-            throw new Error(
-              'YAML 批量同步功能尚未实现，Schema/Staging/Registry 已更新但笔记 YAML 仍为旧值。' +
-              '请在 Group 6 完成后重新执行同步。'
-            );
-          } catch (e: any) {
-            new Notice(e.message);
+            // Step 1: 清理 Staging 中所有笔记该 type 的数据块
+            for (const filePath of affected) {
+              await this.plugin.stagingStore.removeType(filePath, typeName);
+            }
+
+            // Step 2: YAML sync via BulkYamlModifier (stub)
+            try {
+              throw new Error(
+                'YAML 批量同步功能尚未实现，Schema/Staging/Registry 已更新但笔记 YAML 仍为旧值。' +
+                '请在 Group 6 完成后重新执行同步。'
+              );
+            } catch (e: any) {
+              new Notice(e.message);
+            }
+
+            // Step 3: 更新 Schema
+            await this.plugin.schemaStore.update(data => {
+              delete data.note_types[typeName];
+            });
+            await this.reloadResolver();
+          } finally {
+            this.plugin.operationLock.release();
           }
         },
         async () => {

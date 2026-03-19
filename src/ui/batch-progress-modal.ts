@@ -86,15 +86,17 @@ export class BatchProgressModal extends Modal {
       this.renderNoteList();
     });
 
-    // 加载初始进度
+    // 加载初始进度（total 从 state.total_files 读取，而非从 processed 推算）
     const state = await this.stateManager.getState();
-    const total = state.processed_files.length + Object.keys(state.failed_files).length;
+    const processedCount = state.processed_files.length;
+    const failedCount = Object.keys(state.failed_files).length;
+    const total = state.total_files || processedCount; // 兼容旧数据
     if (total > 0) {
       this.updateProgress({
-        processed: state.processed_files.length,
+        processed: processedCount,
         total,
         current_file: '',
-        failed_count: Object.keys(state.failed_files).length,
+        failed_count: failedCount,
       });
     }
   }

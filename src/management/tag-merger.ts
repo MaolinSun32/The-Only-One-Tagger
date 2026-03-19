@@ -7,7 +7,6 @@ import type { OperationLock } from '../operation-lock';
 import type { SchemaResolver } from '../engine/schema-resolver';
 import type {
   MergeOptions, DryRunResult, BulkModifyResult,
-  StagingTagItem, Staging,
 } from '../types';
 import { TAG_REGISTRY_FILE } from '../constants';
 import { BulkYamlModifier } from './bulk-yaml-modifier';
@@ -149,6 +148,43 @@ export class TagMerger extends BulkYamlModifier {
     }
   }
 
+  /**
+   * 覆写 resume()：在 YAML 修改恢复完成后，
+   * 重新执行 staging 清理 + registry 写入（两者幂等，安全重复执行）。
+   * 包裹在 OperationLock 中确保互斥。
+   */
+  async override_resume(context: any): Promise<BulkModifyResult> {
+    if (!this.operationLock.acquire('标签合并')) {
+      new Notice(`当前有操作正在执行：${this.operationLock.getCurrentOp()}`);
+      return { total: 0, completed: 0, failed: 0, failedFiles: {} };
+    }
+
+    try {
+      // 恢复剩余 YAML 修改
+      const result = await super.resume(context);
+
+      // staging 清理和 registry 写入是幂等的，崩溃恢复后安全重新执行
+      const options = context as MergeOptions;
+      await this.cleanupStaging(options);
+      await this.updateRegistry(options);
+      await this.cleanupState();
+
+      return result;
+    } finally {
+      this.operationLock.release();
+    }
+  }
+
+  /**
+   * detectIncomplete + resume 的完整恢复流程入口。
+   * 供 main.ts 启动恢复使用。
+   */
+  async resumeIncomplete(): Promise<BulkModifyResult | null> {
+    const incomplete = await this.detectIncomplete();
+    if (!incomplete) return null;
+    return this.override_resume(incomplete.context);
+  }
+
   /** 检测 vault 是否为 git 仓库 */
   async isGitRepo(): Promise<boolean> {
     try {
@@ -223,10 +259,15 @@ export class TagMerger extends BulkYamlModifier {
    * Staging 清理逻辑。
    * 合并模式需处理三种情况（需预扫描判断 A/B 共存）：
    * - 仅 A 存在：label 替换为 B，保留 user_status/badge 等状态
-   * - A 和 B 同时存在：移除 A，保留 B
-   * - 仅 B 存在：不操作（不会被 findAndUpdateTagGlobally 触发）
+   * - A 和 B 同时存在：直接移除 A，保留原始 B 不动
+   * - 仅 B 存在：不操作
    *
    * 删除模式：直接移除所有 sourceTag 条目。
+   *
+   * 实现：使用 stagingStore.update() 做单次原子操作，
+   * 在遍历中可以看到完整的 facet items 列表，
+   * 因此能正确判断 A/B 共存并做出差异化处理。
+   * 避免了 findAndUpdateTagGlobally 只能看到单条目的局限。
    */
   private async cleanupStaging(options: MergeOptions): Promise<void> {
     const { sourceTag, targetTag } = options;
@@ -237,63 +278,40 @@ export class TagMerger extends BulkYamlModifier {
       return;
     }
 
-    // 合并模式：预扫描 staging 判断每个 facet 中 A/B 共存情况
-    const staging: Staging = await this.stagingStore.load();
-    const coexistSet = new Set<string>(); // "notePath:type:facet" → true if both A and B exist
+    // 合并模式：单次原子操作处理所有三种情况
+    await this.stagingStore.update(data => {
+      for (const [notePath, note] of Object.entries(data.notes)) {
+        for (const [typeName, facets] of Object.entries(note.types)) {
+          for (const [facetName, items] of Object.entries(facets)) {
+            const sourceIdx = items.findIndex(item => item.label === sourceTag);
+            if (sourceIdx === -1) continue; // 该 facet 无 A，跳过
 
-    for (const [notePath, note] of Object.entries(staging.notes)) {
-      for (const [typeName, facets] of Object.entries(note.types)) {
-        for (const [facetName, items] of Object.entries(facets)) {
-          const hasSource = items.some(item => item.label === sourceTag);
-          const hasTarget = items.some(item => item.label === targetTag);
-          if (hasSource && hasTarget) {
-            coexistSet.add(`${notePath}:${typeName}:${facetName}`);
-          }
-        }
-      }
-    }
+            const hasTarget = items.some(item => item.label === targetTag);
 
-    // 执行清理
-    await this.stagingStore.findAndUpdateTagGlobally(
-      sourceTag,
-      (entry: StagingTagItem): StagingTagItem | null => {
-        // findAndUpdateTagGlobally 在遍历时会给出 notePath:type:facet 信息
-        // 但当前 API 只传入 entry，无法直接获取位置信息
-        // 因此这里检查：如果同 facet 有 targetTag，则 A 和 B 共存 → 移除 A
-        // 否则，仅 A → 替换 label 为 B
+            if (hasTarget) {
+              // A 和 B 同时存在 → 直接移除 A，保留原始 B 不动
+              items.splice(sourceIdx, 1);
+            } else {
+              // 仅 A 存在 → 替换 label 为 B，保留其余属性
+              items[sourceIdx] = { ...items[sourceIdx]!, label: targetTag };
+            }
 
-        // 由于 API 限制，我们使用保守策略：
-        // 先移除所有 sourceTag，然后对"仅 A"的情况用 findAndUpdateTagGlobally 无法区分
-        // 所以采用替换策略：将 sourceTag 替换为 targetTag
-        // 如果 targetTag 已存在，会产生重复，但后续 applyAll 时会自然去重
-
-        return { ...entry, label: targetTag };
-      },
-    );
-
-    // 对于 A 和 B 共存的情况，替换后会产生两个 targetTag
-    // 需要去重：移除重复的 targetTag 条目（保留原始的 B）
-    if (coexistSet.size > 0) {
-      await this.stagingStore.update(data => {
-        for (const key of coexistSet) {
-          const [notePath, typeName, facetName] = key.split(':');
-          const items = data.notes[notePath!]?.types[typeName!]?.[facetName!];
-          if (!items) continue;
-
-          // 找到所有 targetTag 条目，保留第一个（原始 B），移除后续（从 A 替换来的）
-          let foundFirst = false;
-          for (let i = items.length - 1; i >= 0; i--) {
-            if (items[i]!.label === targetTag) {
-              if (foundFirst) {
-                items.splice(i, 1);
-              } else {
-                foundFirst = true;
-              }
+            // 清理空 facet
+            if (items.length === 0) {
+              delete facets[facetName];
             }
           }
+          // 清理空 type
+          if (Object.keys(facets).length === 0) {
+            delete note.types[typeName];
+          }
         }
-      });
-    }
+        // 清理空笔记
+        if (Object.keys(note.types).length === 0) {
+          delete data.notes[notePath];
+        }
+      }
+    });
   }
 
   // ── Registry 更新 ──

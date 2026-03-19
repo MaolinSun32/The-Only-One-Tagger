@@ -337,6 +337,7 @@ export default class TheOnlyOneTagger extends Plugin {
       this.operationLock,
       this.settings,
     );
+    this.batchProcessor.setVaultScanner(this.vaultScanner);
 
     const statusBarEl = this.addStatusBarItem();
     this.batchStatusBarItem = new BatchStatusBarItem(
@@ -441,12 +442,10 @@ export default class TheOnlyOneTagger extends Plugin {
         this.batchStatusBarItem.update(0, 0);
       }
 
-      // M8: 标签合并恢复
-      const mergeIncomplete = await this.tagMerger.detectIncomplete();
-      if (mergeIncomplete) {
-        new Notice('检测到未完成的标签合并操作，正在自动恢复...', 5000);
-        const result = await this.tagMerger.resume(mergeIncomplete.context);
-        new Notice(`标签合并恢复完成：${result.completed} 成功，${result.failed} 失败`);
+      // M8: 标签合并恢复（包含 YAML 修改 + staging 清理 + registry 写入）
+      const mergeResult = await this.tagMerger.resumeIncomplete();
+      if (mergeResult) {
+        new Notice(`标签合并恢复完成：${mergeResult.completed} 成功，${mergeResult.failed} 失败`);
       }
     } catch (e) {
       console.error('[TOOT] Startup recovery failed', e);
