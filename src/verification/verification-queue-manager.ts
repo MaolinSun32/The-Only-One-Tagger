@@ -95,17 +95,30 @@ export class VerificationQueueManager {
       const newAttempts = item.attempts + 1;
 
       try {
-        await this.deps.verificationPipeline.verifyTags([{
-          label: item.tag_label,
-          facet: item.facet,
-          notePath: item.source_notes[0] ?? '',
-          type: '',
-        }]);
+        // 通过临时事件监听捕获 pipeline 实际确定的 badge（wiki_verified 或 search_verified）
+        let actualBadge: BadgeType = 'needs_review';
+        const badgeListener = (event: { label: string; badge: BadgeType }) => {
+          if (event.label === item.tag_label) {
+            actualBadge = event.badge;
+          }
+        };
+        this.deps.verificationPipeline.on('tagVerified', badgeListener);
+
+        try {
+          await this.deps.verificationPipeline.verifyTags([{
+            label: item.tag_label,
+            facet: item.facet,
+            notePath: item.source_notes[0] ?? '',
+            type: '',
+          }]);
+        } finally {
+          this.deps.verificationPipeline.off('tagVerified', badgeListener);
+        }
 
         results.push({
           tag_label: item.tag_label,
           success: true,
-          badge: 'search_verified', // pipeline 内部已确定实际 badge
+          badge: actualBadge,
           remove: true,
           newAttempts,
         });

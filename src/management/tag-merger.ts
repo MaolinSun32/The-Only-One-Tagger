@@ -153,7 +153,7 @@ export class TagMerger extends BulkYamlModifier {
    * 重新执行 staging 清理 + registry 写入（两者幂等，安全重复执行）。
    * 包裹在 OperationLock 中确保互斥。
    */
-  async override_resume(context: any): Promise<BulkModifyResult> {
+  async resume(context: any): Promise<BulkModifyResult> {
     if (!this.operationLock.acquire('标签合并')) {
       new Notice(`当前有操作正在执行：${this.operationLock.getCurrentOp()}`);
       return { total: 0, completed: 0, failed: 0, failedFiles: {} };
@@ -182,7 +182,7 @@ export class TagMerger extends BulkYamlModifier {
   async resumeIncomplete(): Promise<BulkModifyResult | null> {
     const incomplete = await this.detectIncomplete();
     if (!incomplete) return null;
-    return this.override_resume(incomplete.context);
+    return this.resume(incomplete.context);
   }
 
   /** 检测 vault 是否为 git 仓库 */

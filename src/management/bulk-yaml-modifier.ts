@@ -76,8 +76,11 @@ export abstract class BulkYamlModifier {
       }
 
       // 每完成一个文件立即持久化状态，确保崩溃后能精确恢复
-      state.pending_files = state.pending_files.filter((p: string) => p !== file.path);
-      state.completed_files.push(file.path);
+      // 只有成功的文件移到 completed；失败的保留在 pending 以便恢复时重试
+      if (!result.failedFiles[file.path]) {
+        state.pending_files = state.pending_files.filter((p: string) => p !== file.path);
+        state.completed_files.push(file.path);
+      }
       await this.writeState(state);
 
       onProgress?.(result.completed + result.failed, files.length);
