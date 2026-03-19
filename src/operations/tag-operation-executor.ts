@@ -240,10 +240,12 @@ export class TagOperationExecutor {
         if (!facetDef) continue; // facet 已从 schema 移除
 
         const writableLabels: string[] = [];
+        const isWikilink = facetDef.value_type === 'wikilink';
 
         for (const item of items) {
           if (item.user_status === 'accepted') {
-            writableLabels.push(item.label);
+            const writeLabel = isWikilink ? `[[${item.label}]]` : item.label;
+            writableLabels.push(writeLabel);
             registryActions.push({
               label: item.label,
               badge: item.badge,
@@ -252,7 +254,8 @@ export class TagOperationExecutor {
             });
           } else if (item.user_status === 'pending' && !item.ai_recommended) {
             // YAML 已有标签：保留写入，但不操作 registry
-            writableLabels.push(item.label);
+            const writeLabel = isWikilink ? `[[${item.label}]]` : item.label;
+            writableLabels.push(writeLabel);
           }
           // deleted → 排除
           // pending + ai_recommended → 排除（留在 staging 待决策）

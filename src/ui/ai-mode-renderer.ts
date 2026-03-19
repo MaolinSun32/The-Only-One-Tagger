@@ -17,6 +17,7 @@ export class AIModeRenderer {
   private networkIndicator: NetworkIndicator | null = null;
   private typeSelector: TypeSelector | null = null;
   private facetSections: FacetSection[] = [];
+  private suppressNextRefresh = false;
 
   // Event handlers for cleanup
   private stagingChangeHandler: (() => void) | null = null;
@@ -234,6 +235,11 @@ export class AIModeRenderer {
 
   /** 从 staging 重新加载并渲染 */
   private async refreshFromStaging(): Promise<void> {
+    // accept/delete/edit 已通过 updateChipStatus 直接更新 DOM，跳过全量重建
+    if (this.suppressNextRefresh) {
+      this.suppressNextRefresh = false;
+      return;
+    }
     const fresh = await this.plugin.stagingStore.getNoteStaging(this.notePath);
     if (!fresh || Object.keys(fresh.types).length === 0) {
       // Staging cleared — parent view will detect and switch mode
@@ -246,10 +252,14 @@ export class AIModeRenderer {
   private buildFacetCallbacks(typeName: string): FacetSectionCallbacks {
     return {
       onAcceptTag: async (facet, tag) => {
+        this.suppressNextRefresh = true;
         await this.plugin.tagOperationExecutor.toggleAccept(this.notePath, typeName, facet, tag);
+        this.updateChipStatus(typeName, facet, tag);
       },
       onDeleteTag: async (facet, tag) => {
+        this.suppressNextRefresh = true;
         await this.plugin.tagOperationExecutor.toggleDelete(this.notePath, typeName, facet, tag);
+        this.updateChipStatus(typeName, facet, tag);
       },
       onEditTag: async (facet, oldTag, newTag) => {
         // 非 taxonomy 标签直接替换，不走 normalize
@@ -332,6 +342,15 @@ export class AIModeRenderer {
         await this.plugin.stagingStore.addTagToFacet(this.notePath, typeName, facet, newEntry);
       },
     };
+  }
+
+  /** 直接更新 chip 的 user_status CSS，避免全量 DOM 重建 */
+  private async updateChipStatus(typeName: string, facet: string, tagLabel: string): Promise<void> {
+    const staging = await this.plugin.stagingStore.getNoteStaging(this.notePath);
+    const item = staging?.types[typeName]?.[facet]?.find(i => i.label === tagLabel);
+    if (!item) return;
+    const section = this.facetSections.find(s => s.getFacetName() === facet);
+    section?.updateTagStatus(tagLabel, item.user_status);
   }
 
   private getFacetDef(typeName: string, facetName: string): FacetDefinition | null {

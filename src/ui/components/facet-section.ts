@@ -214,6 +214,20 @@ export class FacetSection {
     }
   }
 
+  /** 精准更新某个标签的 user_status CSS */
+  updateTagStatus(tagLabel: string, newStatus: string): void {
+    const idx = this.items.findIndex(i => i.label === tagLabel);
+    const item = this.items[idx];
+    const chip = this.chips[idx];
+    if (item && chip) {
+      item.user_status = newStatus as 'pending' | 'accepted' | 'deleted';
+      chip.updateStatus(newStatus);
+    }
+  }
+
+  /** 获取此 section 的 facet 名称 */
+  getFacetName(): string { return this.facetName; }
+
   destroy(): void {
     for (const chip of this.chips) chip.destroy();
     this.containerEl.remove();

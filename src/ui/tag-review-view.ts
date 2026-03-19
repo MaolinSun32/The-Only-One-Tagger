@@ -70,7 +70,7 @@ export class TagReviewView extends ItemView {
     this.stagingChangeHandler = () => {
       if (this.activeTab !== 'review') return;
       if (this.refreshTimer) clearTimeout(this.refreshTimer);
-      this.refreshTimer = setTimeout(() => this.refreshReviewTab(), 300);
+      this.refreshTimer = setTimeout(() => this.handleStagingChange(), 300);
     };
     this.plugin.stagingStore.on('change', this.stagingChangeHandler);
 
@@ -186,6 +186,27 @@ export class TagReviewView extends ItemView {
         this.contentEl_, this.plugin, this.currentNotePath, this.currentFile,
       );
     }
+
+  }
+
+  /**
+   * 智能处理 staging 变更。
+   * AIModeRenderer 仍有效时跳过全量重建（accept/delete/edit 由渲染器自行更新 DOM）。
+   * 仅在模式切换（staging 清空 → 手动模式）或结构变化时全量重建。
+   */
+  private async handleStagingChange(): Promise<void> {
+    if (!this.currentNotePath) return;
+
+    const staging = await this.plugin.stagingStore.getNoteStaging(this.currentNotePath);
+    const hasStaging = staging && Object.keys(staging.types).length > 0;
+
+    // 当前是 AIModeRenderer 且 staging 仍有数据 → 跳过全量重建
+    if (this.currentRenderer instanceof AIModeRenderer && hasStaging) {
+      return;
+    }
+
+    // 模式切换或笔记变化 → 全量重建
+    this.refreshReviewTab();
   }
 
   private showNoFile(): void {

@@ -34,12 +34,16 @@ export class FrontmatterService {
       types = [];
     }
 
-    // Extract type blocks
+    // Extract type blocks (strip [[]] from wikilink values)
     const typeData: Record<string, Record<string, unknown>> = {};
     for (const typeName of types) {
       const block = fm[typeName];
       if (block && typeof block === 'object' && !Array.isArray(block)) {
-        typeData[typeName] = { ...(block as Record<string, unknown>) };
+        const cleaned: Record<string, unknown> = {};
+        for (const [key, val] of Object.entries(block as Record<string, unknown>)) {
+          cleaned[key] = this.stripWikilinkBrackets(val);
+        }
+        typeData[typeName] = cleaned;
       }
     }
 
@@ -88,6 +92,14 @@ export class FrontmatterService {
       // 5. Update _tagged_at
       frontmatter._tagged_at = new Date().toISOString().split('T')[0];
     });
+  }
+
+  /** Strip [[]] brackets from wikilink values (string or string[]) */
+  private stripWikilinkBrackets(val: unknown): unknown {
+    const strip = (s: string) => s.replace(/^\[\[/, '').replace(/\]\]$/, '');
+    if (typeof val === 'string') return strip(val);
+    if (Array.isArray(val)) return val.map(v => typeof v === 'string' ? strip(v) : v);
+    return val;
   }
 
   /**
