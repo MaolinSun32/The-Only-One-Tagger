@@ -21,7 +21,13 @@
       "Bash(xargs grep:*)",
       "mcp__obsidian-devtools__obsidian_connect",
       "mcp__obsidian-devtools__obsidian_execute_js",
-      "mcp__obsidian-devtools__obsidian_capture_screenshot"
+      "mcp__obsidian-devtools__obsidian_capture_screenshot",
+      "mcp__obsidian-devtools__obsidian_get_plugin_info",
+      "mcp__obsidian-devtools__obsidian_get_console_logs",
+      "mcp__obsidian-devtools__obsidian_get_plugin_settings",
+      "mcp__obsidian-devtools__obsidian_list_commands",
+      "mcp__obsidian-devtools__obsidian_reload_plugin",
+      "Bash(cd:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -1,23 +1,30 @@
+import type { App } from 'obsidian';
 import type { TagEntry, FacetDefinition } from '../types';
 import type { SchemaResolver } from '../engine/schema-resolver';
 import type { PromptFilterBuilder } from '../engine/prompt-filter-builder';
 import type { WikilinkCandidateCollector } from './wikilink-candidate-collector';
-import type { ChatMessage } from './generation-provider';
+import type { ChatMessage, ContentPart } from './generation-provider';
 import { PLUGIN_YAML_FIELDS } from '../constants';
+import { ImageExtractor } from './image-extractor';
 
 /**
  * 组装两步 AI 调用和 Regenerate 的 prompt 文本。
  * 不含黑名单标签（黑名单在 AIResponseValidator 中处理）。
  */
 export class PromptAssembler {
+  private readonly imageExtractor: ImageExtractor;
+
   constructor(private readonly deps: {
+    app: App;
     schemaResolver: SchemaResolver;
     promptFilterBuilder: PromptFilterBuilder;
     wikilinkCandidateCollector: WikilinkCandidateCollector;
-  }) {}
+  }) {
+    this.imageExtractor = new ImageExtractor(deps.app);
+  }
 
   /** 构建步骤 1 的 prompt messages（type 识别） */
-  buildStep1Prompt(noteContent: string): ChatMessage[] {
+  async buildStep1Prompt(noteContent: string, sourcePath: string): Promise<ChatMessage[]> {
     const types = this.deps.schemaResolver.getAllTypes();
     const typeList = types
       .map(t => `- ${t.name}: ${t.label} — ${t.description}`)
@@ -34,19 +41,20 @@ export class PromptAssembler {
       },
       {
         role: 'user',
-        content: this.stripPluginFields(noteContent),
+        content: await this.buildUserContent(noteContent, sourcePath),
       },
     ];
   }
 
   /** 构建步骤 2 的 prompt messages（tag 生成） */
-  buildStep2Prompt(
+  async buildStep2Prompt(
     type: string,
     candidatesByFacet: Map<string, TagEntry[]>,
     existingTags: Record<string, unknown>,
     noteContent: string,
     wikilinkCandidates: string[],
-  ): ChatMessage[] {
+    sourcePath: string,
+  ): Promise<ChatMessage[]> {
     const schema = this.deps.schemaResolver.resolve(type);
     const allFacets = { ...schema.requiredFacets, ...schema.optionalFacets };
 
@@ -82,9 +90,20 @@ export class PromptAssembler {
       },
       {
         role: 'user',
-        content: this.stripPluginFields(noteContent),
+        content: await this.buildUserContent(noteContent, sourcePath),
       },
     ];
+  }
+
+  /** 构建多模态 user content（文本 + 图片） */
+  private async buildUserContent(
+    noteContent: string,
+    sourcePath: string,
+  ): Promise<string | ContentPart[]> {
+    const strippedText = this.stripPluginFields(noteContent);
+    const images = await this.imageExtractor.extractImages(noteContent, sourcePath);
+    if (images.length === 0) return strippedText;
+    return [{ type: 'text', text: strippedText }, ...images];
   }
 
   /** 构建 Regenerate 的 prompt messages */

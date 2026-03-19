@@ -11,6 +11,8 @@ interface Checkers {
 const STATUS_LABELS: Record<string, string> = {
   generation: '生成服务',
   verification: '验证服务',
+  wikipedia: 'Wikipedia',
+  search: '搜索服务',
 };
 
 function formatOne(status: HealthStatus): string {

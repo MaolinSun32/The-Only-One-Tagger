@@ -7,6 +7,8 @@ export interface HealthCheckerConfig {
   getApiKey: () => string;
   pingIntervalMs: number;
   httpClient: HttpClient;
+  /** 自定义 ping header 构建（默认使用 Authorization: Bearer）*/
+  buildPingHeaders?: (apiKey: string) => Record<string, string>;
 }
 
 /**
@@ -24,6 +26,7 @@ export class HealthChecker {
   private readonly getApiKey: () => string;
   private readonly pingIntervalMs: number;
   private readonly httpClient: HttpClient;
+  private readonly buildPingHeaders: (apiKey: string) => Record<string, string>;
 
   constructor(config: HealthCheckerConfig) {
     this.name = config.name;
@@ -31,6 +34,8 @@ export class HealthChecker {
     this.getApiKey = config.getApiKey;
     this.pingIntervalMs = config.pingIntervalMs;
     this.httpClient = config.httpClient;
+    this.buildPingHeaders = config.buildPingHeaders
+      ?? ((key) => ({ 'Authorization': `Bearer ${key}` }));
 
     // 初始状态
     this.status = this.getApiKey() ? 'offline' : 'not_configured';
@@ -84,8 +89,7 @@ export class HealthChecker {
     try {
       const endpoint = this.getEndpoint();
       const apiKey = this.getApiKey();
-      const headers: Record<string, string> = {};
-      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+      const headers = this.buildPingHeaders(apiKey);
       await this.httpClient.get(endpoint, headers);
       this.setStatus('online');
     } catch {

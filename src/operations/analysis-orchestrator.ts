@@ -43,6 +43,7 @@ export class AnalysisOrchestrator {
     const detectedType = await this.deps.generationProvider.detectType(
       content,
       this.deps.schemaResolver.getAllTypes(),
+      file.path,
     );
 
     // Guard: 校验 type 存在于 schema
@@ -95,6 +96,7 @@ export class AnalysisOrchestrator {
       ),
       noteContent,
       maxTagsPerFacet: this.deps.settings.max_tags_per_facet,
+      sourcePath: file.path,
     };
     const rawOutput = await this.deps.generationProvider.generateTags(context);
 

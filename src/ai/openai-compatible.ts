@@ -25,6 +25,7 @@ export class OpenAICompatibleProvider implements GenerationProvider, Verificatio
   private readonly model: string;
   private readonly temperature: number;
   private readonly maxTokens: number | undefined;
+  private readonly enableThinking: boolean;
   private readonly httpClient: HttpClient;
   private readonly rateLimiter: RateLimiter;
   private promptAssembler: PromptAssembler | null = null;
@@ -35,6 +36,7 @@ export class OpenAICompatibleProvider implements GenerationProvider, Verificatio
     model: string;
     temperature: number;
     maxTokens?: number;
+    enableThinking?: boolean;
     httpClient: HttpClient;
     rateLimiter: RateLimiter;
   }) {
@@ -43,6 +45,7 @@ export class OpenAICompatibleProvider implements GenerationProvider, Verificatio
     this.model = config.model;
     this.temperature = config.temperature;
     this.maxTokens = config.maxTokens;
+    this.enableThinking = config.enableThinking ?? true;
     this.httpClient = config.httpClient;
     this.rateLimiter = config.rateLimiter;
   }
@@ -54,9 +57,9 @@ export class OpenAICompatibleProvider implements GenerationProvider, Verificatio
 
   // ── GenerationProvider ──
 
-  async detectType(noteContent: string, _typeDescriptions: TypeSummary[]): Promise<string> {
+  async detectType(noteContent: string, _typeDescriptions: TypeSummary[], sourcePath: string): Promise<string> {
     const pa = this.requirePromptAssembler();
-    const messages = pa.buildStep1Prompt(noteContent);
+    const messages = await pa.buildStep1Prompt(noteContent, sourcePath);
     const content = await this.chat(messages);
     // 步骤 1 返回纯字符串（type 名称）
     return content.trim().replace(/['"]/g, '');
@@ -64,12 +67,13 @@ export class OpenAICompatibleProvider implements GenerationProvider, Verificatio
 
   async generateTags(context: TagGenContext): Promise<FacetTagMap> {
     const pa = this.requirePromptAssembler();
-    const messages = pa.buildStep2Prompt(
+    const messages = await pa.buildStep2Prompt(
       context.type,
       context.candidatesByFacet,
       context.existingTags,
       context.noteContent,
       context.wikilinkCandidates,
+      context.sourcePath,
     );
     const content = await this.chat(messages);
     return this.parseJson<FacetTagMap>(content) ?? {};
@@ -143,6 +147,9 @@ export class OpenAICompatibleProvider implements GenerationProvider, Verificatio
     };
     if (this.maxTokens !== undefined) {
       body['max_tokens'] = this.maxTokens;
+    }
+    if (!this.enableThinking) {
+      body['enable_thinking'] = false;
     }
 
     const data = await this.httpClient.post<OpenAIResponse>(url, body, {

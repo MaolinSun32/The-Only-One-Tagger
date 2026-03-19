@@ -191,6 +191,7 @@ export interface TootSettings {
   generation_model: string;
   generation_temperature: number;
   generation_max_tokens: number;
+  enable_thinking: boolean;
 
   // Verification AI
   verification_api_key: string;
@@ -331,6 +332,7 @@ export interface TagGenContext {
   wikilinkCandidates: string[];
   noteContent: string;
   maxTagsPerFacet: number;
+  sourcePath: string;
 }
 
 /** facet → tags 映射（AI 输出原始格式） */

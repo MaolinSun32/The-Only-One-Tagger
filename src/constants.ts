@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS: TootSettings = {
   generation_model: '',
   generation_temperature: 0.7,
   generation_max_tokens: 2048,
+  enable_thinking: true,
 
   verification_api_key: '',
   verification_base_url: '',

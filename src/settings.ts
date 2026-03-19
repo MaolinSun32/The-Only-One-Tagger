@@ -55,6 +55,13 @@ export class TootSettingTab extends PluginSettingTab {
         .setValue(String(this.plugin.settings.generation_max_tokens))
         .onChange(async v => { this.plugin.settings.generation_max_tokens = parseInt(v, 10) || 2048; await this.plugin.saveSettings(); }));
 
+    new Setting(containerEl)
+      .setName('Enable Thinking')
+      .setDesc('关闭后 Qwen3 系列模型跳过深度思考，响应更快（~10s vs ~115s）。仅影响支持 thinking 的模型。')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.enable_thinking)
+        .onChange(async v => { this.plugin.settings.enable_thinking = v; await this.plugin.saveSettings(); }));
+
     // ── Verification AI ──
     containerEl.createEl('h3', { text: 'Verification AI' });
     containerEl.createEl('p', {

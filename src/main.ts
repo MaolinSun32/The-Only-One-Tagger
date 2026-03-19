@@ -158,10 +158,24 @@ export default class TheOnlyOneTagger extends Plugin {
     });
     this.searchChecker = new HealthChecker({
       name: 'search',
-      getEndpoint: () => this.settings.search_base_url,
+      getEndpoint: () => {
+        // Brave: 用简单查询 ping；Tavily: 用 base URL
+        if (this.settings.search_type === 'brave') {
+          const base = this.settings.search_base_url || 'https://api.search.brave.com/res/v1/web/search';
+          return `${base}?q=test&count=1`;
+        }
+        return this.settings.search_base_url;
+      },
       getApiKey: () => this.settings.search_api_key,
       pingIntervalMs: this.settings.ping_interval_ms,
       httpClient: this.httpClient,
+      buildPingHeaders: (apiKey): Record<string, string> => {
+        // Brave 用 X-Subscription-Token，Tavily 用 Authorization
+        if (this.settings.search_type === 'brave') {
+          return { 'X-Subscription-Token': apiKey };
+        }
+        return { 'Authorization': `Bearer ${apiKey}` };
+      },
     });
     this.wikipediaChecker = new HealthChecker({
       name: 'wikipedia',
@@ -170,6 +184,7 @@ export default class TheOnlyOneTagger extends Plugin {
       getApiKey: () => 'wikipedia', // 始终非空，使 checker 不进入 not_configured
       pingIntervalMs: this.settings.ping_interval_ms,
       httpClient: this.httpClient,
+      buildPingHeaders: () => ({}), // Wikipedia 不需要认证
     });
 
     this.networkAggregator = new NetworkStatusAggregator({
@@ -183,6 +198,7 @@ export default class TheOnlyOneTagger extends Plugin {
     this.wikilinkCandidateCollector = new WikilinkCandidateCollector(this.app);
 
     this.promptAssembler = new PromptAssembler({
+      app: this.app,
       schemaResolver: this.schemaResolver,
       promptFilterBuilder: this.promptFilterBuilder,
       wikilinkCandidateCollector: this.wikilinkCandidateCollector,
@@ -194,6 +210,7 @@ export default class TheOnlyOneTagger extends Plugin {
       model: this.settings.generation_model,
       temperature: this.settings.generation_temperature,
       maxTokens: this.settings.generation_max_tokens,
+      enableThinking: this.settings.enable_thinking,
       httpClient: this.httpClient,
       rateLimiter: this.rateLimiter,
     });

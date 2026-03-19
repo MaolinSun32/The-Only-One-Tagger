@@ -16,7 +16,7 @@ export interface ChatMessage {
 /** 生成 AI 接口（步骤 1 type 识别 + 步骤 2 tag 生成 + Regenerate 同义词） */
 export interface GenerationProvider {
   /** 步骤 1：识别笔记类型 */
-  detectType(noteContent: string, typeDescriptions: TypeSummary[]): Promise<string>;
+  detectType(noteContent: string, typeDescriptions: TypeSummary[], sourcePath: string): Promise<string>;
 
   /** 步骤 2：按 type 生成标签 */
   generateTags(context: TagGenContext): Promise<FacetTagMap>;
