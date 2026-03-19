@@ -48,6 +48,16 @@ export class BatchStateManager {
     });
   }
 
+  /** 重试成功后：从 failed_files 移除，确保已在 processed_files 中 */
+  async clearFailure(filePath: string): Promise<void> {
+    await this.store.update(data => {
+      delete data.failed_files[filePath];
+      if (!data.processed_files.includes(filePath)) {
+        data.processed_files.push(filePath);
+      }
+    });
+  }
+
   /** 更新状态（running / paused / completed / terminated） */
   async setStatus(status: BatchState['status']): Promise<void> {
     await this.store.update(data => {

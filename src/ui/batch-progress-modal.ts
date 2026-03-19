@@ -212,6 +212,8 @@ export class BatchProgressModal extends Modal {
               }
               try {
                 await this.orchestrator!.analyzeNote(file as any);
+                // 从 failed_files 移除并记录为成功
+                await this.stateManager.clearFailure(path);
                 new Notice(`重试成功: ${this.getFileName(path)}`);
                 await this.renderNoteList();
               } catch (e: any) {

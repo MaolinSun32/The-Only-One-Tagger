@@ -86,7 +86,8 @@ export abstract class BulkYamlModifier {
       onProgress?.(result.completed + result.failed, files.length);
     }
 
-    state.status = 'completed';
+    // 有失败文件时保持 running 状态，让 detectIncomplete() 能在下次启动时触发恢复重试
+    state.status = result.failed > 0 ? 'running' : 'completed';
     await this.writeState(state);
 
     return result;

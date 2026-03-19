@@ -45,7 +45,8 @@ export class HttpClient {
     headers?: Record<string, string>,
   ): Promise<T> {
     const mergedHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
+      // 仅在有 body 时设置 Content-Type，避免 GET 请求带多余 header 导致严格 API 返回 400/415
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...headers,
     };
 

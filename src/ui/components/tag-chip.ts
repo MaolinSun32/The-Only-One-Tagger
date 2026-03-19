@@ -140,7 +140,11 @@ export class TagChip {
     input.focus();
     input.select();
 
+    let committed = false;
     const commit = () => {
+      if (committed) return; // 防止 Enter + blur 双重触发
+      committed = true;
+      input.removeEventListener('blur', commit);
       const newVal = input.value.trim();
       if (newVal && newVal !== currentText) {
         this.callbacks.onEdit(currentText, newVal);

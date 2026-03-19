@@ -18,7 +18,7 @@ export class RateLimiter {
     this.bucketSize = config?.bucketSize ?? 20;
   }
 
-  /** 获取一个令牌，令牌不足时 await 阻塞 */
+  /** 获取一个令牌，令牌不足时 await 阻塞。递归重试防止并发竞态。 */
   async acquire(dimension: string): Promise<void> {
     const bucket = this.getOrCreate(dimension);
     this.refill(bucket);
@@ -33,9 +33,8 @@ export class RateLimiter {
     const waitMs = (deficit / this.tokensPerSecond) * 1000;
     await this.delay(waitMs);
 
-    // 等待后重新 refill 并消耗
-    this.refill(bucket);
-    bucket.tokens = Math.max(0, bucket.tokens - 1);
+    // 递归重试：等待后重新检查令牌（防止并发 acquire 同时等待后同时扣减导致 tokens 变负）
+    return this.acquire(dimension);
   }
 
   // ── internal ──
