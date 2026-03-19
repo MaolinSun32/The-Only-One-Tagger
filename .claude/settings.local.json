@@ -18,7 +18,14 @@
       "Bash(find /d/Vault-4/Projects/The-Only-One-Tagger/src -type f -name *.ts)",
       "Bash(wc:*)",
       "Bash(find D:Vault-4ProjectsThe-Only-One-Taggersrcui -type f -name *.ts)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "mcp__obsidian-devtools__obsidian_connect",
+      "mcp__obsidian-devtools__obsidian_execute_js",
+      "mcp__obsidian-devtools__obsidian_capture_screenshot"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "obsidian-devtools"
+  ]
 }

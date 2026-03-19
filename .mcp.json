@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "obsidian-devtools": {
+      "command": "node",
+      "args": ["D:/Vault-4/Projects/obsidian-devtools-mcp/dist/index.js"]
+    }
+  }
+}
