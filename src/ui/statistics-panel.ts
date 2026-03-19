@@ -1,5 +1,6 @@
 import { App } from 'obsidian';
 import type { RegistryStore } from '../storage/registry-store';
+import type { SchemaResolver } from '../engine/schema-resolver';
 import type { TagStatistics } from '../types';
 import { NOTE_TYPES } from '../constants';
 
@@ -11,6 +12,7 @@ export class StatisticsPanel {
   constructor(
     private app: App,
     private registryStore: RegistryStore,
+    private schemaResolver?: SchemaResolver,
   ) {}
 
   /** 计算完整统计数据（实时扫描，不缓存） */
@@ -47,12 +49,35 @@ export class StatisticsPanel {
       if (!fm) continue;
 
       const types: string[] = Array.isArray(fm.type) ? fm.type : [];
+      const countedFacets = new Set<string>(); // avoid double-counting shared facets
+
       for (const typeName of types) {
         if (!NOTE_TYPES.includes(typeName as any)) continue;
-        const typeBlock = fm[typeName];
-        if (!typeBlock || typeof typeBlock !== 'object') continue;
 
-        for (const facetValue of Object.values(typeBlock)) {
+        // Collect facet values — support both nested (legacy) and flat (new) formats
+        const facetEntries: Array<[string, unknown]> = [];
+        const typeBlock = fm[typeName];
+        if (typeBlock && typeof typeBlock === 'object' && !Array.isArray(typeBlock)) {
+          // Legacy nested format
+          facetEntries.push(...Object.entries(typeBlock));
+        } else if (this.schemaResolver) {
+          // New flat format
+          try {
+            const resolved = this.schemaResolver.resolve(typeName);
+            const allFacetNames = [
+              ...Object.keys(resolved.requiredFacets),
+              ...Object.keys(resolved.optionalFacets),
+            ];
+            for (const facetName of allFacetNames) {
+              if (fm[facetName] !== undefined && !countedFacets.has(facetName)) {
+                facetEntries.push([facetName, fm[facetName]]);
+                countedFacets.add(facetName);
+              }
+            }
+          } catch { continue; }
+        }
+
+        for (const [, facetValue] of facetEntries) {
           if (Array.isArray(facetValue)) {
             for (const v of facetValue) {
               if (typeof v === 'string') {

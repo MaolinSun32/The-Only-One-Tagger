@@ -210,40 +210,56 @@ export class TagMerger extends BulkYamlModifier {
       const types: string[] = Array.isArray(frontmatter.type) ? frontmatter.type : [];
 
       for (const typeName of types) {
-        const typeBlock = frontmatter[typeName];
-        if (!typeBlock || typeof typeBlock !== 'object') continue;
+        // Collect facet entries to check — support both nested (legacy) and flat (new) formats
+        const entries: Array<{ container: Record<string, any>; facetName: string }> = [];
 
-        for (const [facetName, facetValue] of Object.entries(typeBlock)) {
+        const typeBlock = frontmatter[typeName];
+        if (typeBlock && typeof typeBlock === 'object' && !Array.isArray(typeBlock)) {
+          // Legacy nested format
+          for (const facetName of Object.keys(typeBlock)) {
+            entries.push({ container: typeBlock, facetName });
+          }
+        } else {
+          // New flat format — get facet names from schema
+          try {
+            const resolved = this.schemaResolver.resolve(typeName);
+            const allFacetNames = [
+              ...Object.keys(resolved.requiredFacets),
+              ...Object.keys(resolved.optionalFacets),
+            ];
+            for (const facetName of allFacetNames) {
+              if (frontmatter[facetName] !== undefined) {
+                entries.push({ container: frontmatter, facetName });
+              }
+            }
+          } catch { continue; }
+        }
+
+        for (const { container, facetName } of entries) {
+          const facetValue = container[facetName];
           if (Array.isArray(facetValue)) {
-            // allow_multiple: true 的 facet
             const idx = facetValue.indexOf(sourceTag);
             if (idx !== -1) {
               modified = true;
               if (targetTag !== null) {
-                // 合并模式
                 if (facetValue.includes(targetTag)) {
-                  // A 和 B 都存在 → 移除 A，保留 B（防重复）
                   facetValue.splice(idx, 1);
                 } else {
-                  // 只有 A → 替换为 B
                   facetValue[idx] = targetTag;
                 }
               } else {
-                // 删除模式 → 从数组中移除
                 facetValue.splice(idx, 1);
               }
-              // 数组空了则删除整个 facet 键
               if (facetValue.length === 0) {
-                delete typeBlock[facetName];
+                delete container[facetName];
               }
             }
           } else if (facetValue === sourceTag) {
-            // allow_multiple: false 的单值 facet
             modified = true;
             if (targetTag !== null) {
-              typeBlock[facetName] = targetTag;
+              container[facetName] = targetTag;
             } else {
-              delete typeBlock[facetName];
+              delete container[facetName];
             }
           }
         }

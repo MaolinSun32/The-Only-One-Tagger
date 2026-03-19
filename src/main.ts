@@ -271,7 +271,7 @@ export default class TheOnlyOneTagger extends Plugin {
     });
 
     // ── M5 业务编排 ──
-    this.frontmatterService = new FrontmatterService(this.app);
+    this.frontmatterService = new FrontmatterService(this.app, this.schemaResolver);
     this.contentHasher = new ContentHasher(this.app);
 
     this.analysisOrchestrator = new AnalysisOrchestrator({
@@ -399,7 +399,7 @@ export default class TheOnlyOneTagger extends Plugin {
       this.schemaResolver,
     );
     this.importExportManager = new ImportExportManager(this.registryStore);
-    this.statisticsPanel = new StatisticsPanel(this.app, this.registryStore);
+    this.statisticsPanel = new StatisticsPanel(this.app, this.registryStore, this.schemaResolver);
     this.relationDiscoverer = new RelationDiscoverer(
       this.registryStore,
       this.httpClient,
